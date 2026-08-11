@@ -1,15 +1,18 @@
 using Bricker.Api.Models;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace Bricker.Api.Data;
 
-public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options) : DbContext(options)
+public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options) : IdentityDbContext<AppUser>(options)
 {
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Listing> Listings => Set<Listing>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
+
         modelBuilder.Entity<Category>(entity =>
         {
             entity.ToTable("Categories");

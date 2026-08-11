@@ -1,4 +1,6 @@
 using Bricker.Api.Data;
+using Bricker.Api.Models;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,17 +14,35 @@ var connectionString = builder.Configuration.GetConnectionString("BrickerDb")
     ?? throw new InvalidOperationException("A connection string 'BrickerDb' não foi configurada.");
 
 builder.Services.AddDbContext<BrickerDbContext>(options => options.UseSqlServer(connectionString));
+builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme)
+    .AddIdentityCookies();
+
+builder.Services.AddIdentityCore<AppUser>(options =>
+{
+    options.Password.RequiredLength = 8;
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireNonAlphanumeric = false;
+    options.User.RequireUniqueEmail = true;
+})
+    .AddEntityFrameworkStores<BrickerDbContext>()
+    .AddSignInManager();
+
+builder.Services.AddAuthorization();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(frontEndPolicy, policy =>
         policy.WithOrigins("http://localhost:5173")
               .AllowAnyHeader()
-              .AllowAnyMethod());
+              .AllowAnyMethod()
+              .AllowCredentials());
 });
 
 var app = builder.Build();
 
 app.UseCors(frontEndPolicy);
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
