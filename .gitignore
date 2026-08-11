@@ -11,9 +11,7 @@ dist/
 appsettings.Development.local.json
 uploads/
 
-# Local tooling caches
-work/.dotnet/
-work/.nuget/
-work/npm-cache/
+# Local tooling caches and scratch files
+work/
 
 bricker-web/work/
