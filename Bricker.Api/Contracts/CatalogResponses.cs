@@ -21,3 +21,14 @@ public sealed record ListingResponse(
     DateTime CreatedAtUtc);
 
 public sealed record PagedResponse<T>(IReadOnlyCollection<T> Items, int Page, int PageSize, int TotalCount);
+
+public sealed record UpsertListingRequest(
+    Guid CategoryId,
+    string Title,
+    string Description,
+    decimal Price,
+    string Unit,
+    decimal Quantity,
+    MaterialCondition Condition,
+    string City,
+    string State);

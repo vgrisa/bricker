@@ -40,12 +40,17 @@ public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options)
             entity.Property(listing => listing.City).HasMaxLength(100).IsRequired();
             entity.Property(listing => listing.State).HasMaxLength(2).IsRequired();
             entity.Property(listing => listing.SellerDisplayName).HasMaxLength(100).IsRequired();
+            entity.Property(listing => listing.SellerId).HasMaxLength(450);
             entity.Property(listing => listing.RowVersion).IsRowVersion();
             entity.HasIndex(listing => new { listing.Status, listing.CategoryId, listing.City, listing.State });
             entity.HasOne(listing => listing.Category)
                 .WithMany(category => category.Listings)
                 .HasForeignKey(listing => listing.CategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(listing => listing.Seller)
+                .WithMany()
+                .HasForeignKey(listing => listing.SellerId)
+                .OnDelete(DeleteBehavior.SetNull);
             entity.HasData(
                 new Listing
                 {
