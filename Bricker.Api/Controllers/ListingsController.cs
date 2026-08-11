@@ -10,7 +10,7 @@ namespace Bricker.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/listings")]
-public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser> userManager) : ControllerBase
+public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser> userManager, IWebHostEnvironment environment) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResponse<ListingResponse>>> Search(
@@ -79,7 +79,7 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
 
     [Authorize]
     [HttpPost]
-    public async Task<ActionResult<ListingResponse>> Create(UpsertListingRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ListingResponse>> Create([FromForm] UpsertListingRequest request, CancellationToken cancellationToken)
     {
         var validation = Validate(request);
         if (validation is not null) return validation;
@@ -107,7 +107,8 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
             City = request.City.Trim(),
             State = request.State.Trim().ToUpperInvariant(),
             SellerId = user.Id,
-            SellerDisplayName = user.DisplayName
+            SellerDisplayName = user.DisplayName,
+            ImageUrl = await SaveImage(request.Image, cancellationToken)
         };
 
         db.Listings.Add(listing);
@@ -119,7 +120,7 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
 
     [Authorize]
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<ListingResponse>> Update(Guid id, UpsertListingRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ListingResponse>> Update(Guid id, [FromForm] UpsertListingRequest request, CancellationToken cancellationToken)
     {
         var validation = Validate(request);
         if (validation is not null) return validation;
@@ -146,6 +147,12 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         listing.Condition = request.Condition;
         listing.City = request.City.Trim();
         listing.State = request.State.Trim().ToUpperInvariant();
+        var imageUrl = await SaveImage(request.Image, cancellationToken);
+        if (imageUrl is not null)
+        {
+            DeleteImage(listing.ImageUrl);
+            listing.ImageUrl = imageUrl;
+        }
         listing.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
@@ -181,5 +188,34 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     private static ListingResponse ToResponse(Listing listing) => new(
         listing.Id, listing.Title, listing.Description, listing.Price, listing.Unit, listing.Quantity,
         listing.Condition, listing.Status, listing.City, listing.State, listing.Category.Name,
-        listing.Category.Slug, listing.SellerDisplayName, listing.CreatedAtUtc);
+        listing.Category.Slug, listing.SellerDisplayName, listing.ImageUrl, listing.CreatedAtUtc);
+
+    private async Task<string?> SaveImage(IFormFile? image, CancellationToken cancellationToken)
+    {
+        if (image is null || image.Length == 0) return null;
+        if (image.Length > 5 * 1024 * 1024) throw new BadHttpRequestException("A imagem deve ter no máximo 5 MB.");
+
+        var extensions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["image/jpeg"] = ".jpg", ["image/png"] = ".png", ["image/webp"] = ".webp"
+        };
+        if (!extensions.TryGetValue(image.ContentType, out var extension))
+            throw new BadHttpRequestException("Envie uma imagem JPG, PNG ou WEBP.");
+
+        var relativeFolder = Path.Combine("uploads", "listings");
+        var folder = Path.Combine(environment.ContentRootPath, relativeFolder);
+        Directory.CreateDirectory(folder);
+        var fileName = $"{Guid.NewGuid():N}{extension}";
+        await using var stream = System.IO.File.Create(Path.Combine(folder, fileName));
+        await image.CopyToAsync(stream, cancellationToken);
+        return $"/{relativeFolder.Replace('\\', '/')}/{fileName}";
+    }
+
+    private void DeleteImage(string? imageUrl)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrl)) return;
+        var relativePath = imageUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+        var fullPath = Path.Combine(environment.ContentRootPath, relativePath);
+        if (System.IO.File.Exists(fullPath)) System.IO.File.Delete(fullPath);
+    }
 }

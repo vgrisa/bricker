@@ -14,6 +14,7 @@ public sealed class Listing
     public required string City { get; set; }
     public required string State { get; set; }
     public required string SellerDisplayName { get; set; }
+    public string? ImageUrl { get; set; }
     public string? SellerId { get; init; }
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
     public DateTime? UpdatedAtUtc { get; set; }

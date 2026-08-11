@@ -15,6 +15,7 @@ type Listing = {
   categorySlug: string;
   condition: number;
   status: number;
+  imageUrl?: string;
 };
 type ListingResult = { items: Listing[]; totalCount: number };
 type Profile = {
@@ -42,7 +43,7 @@ async function api<T>(path: string, options: RequestInit = {}) {
   const response = await fetch(`${apiUrl}${path}`, {
     credentials: "include",
     ...options,
-    headers: { "Content-Type": "application/json", ...options.headers },
+    headers: options.body instanceof FormData ? options.headers : { "Content-Type": "application/json", ...options.headers },
   });
   if (!response.ok) {
     const body: ApiError = await response.json().catch(() => ({}));
@@ -79,6 +80,7 @@ function App() {
     state: "",
   });
   const [ad, setAd] = useState(emptyAd);
+  const [image, setImage] = useState<File | null>(null);
   const loadListings = useCallback(
     async (filters = { search: "", city: "", category: "" }) => {
       setLoading(true);
@@ -131,6 +133,7 @@ function App() {
       return;
     }
     setEditing(item ?? null);
+    setImage(null);
     setAd(
       item
         ? {
@@ -183,15 +186,12 @@ function App() {
     setSaving(true);
     setError("");
     try {
-      const data = {
-        ...ad,
-        price: Number(ad.price),
-        quantity: Number(ad.quantity),
-        condition: Number(ad.condition),
-      };
+      const data = new FormData();
+      Object.entries(ad).forEach(([key, value]) => data.append(key, value));
+      if (image) data.append("image", image);
       await api(editing ? `/listings/${editing.id}` : "/listings", {
         method: editing ? "PUT" : "POST",
-        body: JSON.stringify(data),
+        body: data,
       });
       setModal(null);
       setMessage(editing ? "Anúncio atualizado." : "Anúncio publicado.");
@@ -380,7 +380,7 @@ function App() {
           <div className="listing-grid">
             {listings.map((item, index) => (
               <article className="listing-card" key={item.id}>
-                <div className={`listing-image tone-${index % 3}`}>
+                <div className={`listing-image tone-${index % 3}`} style={item.imageUrl ? { backgroundImage: `url(http://localhost:5190${item.imageUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>
                   <span>{item.category}</span>
                 </div>
                 <div className="listing-content">
@@ -476,6 +476,11 @@ function App() {
                         setAd({ ...ad, description: e.target.value })
                       }
                     />
+                  </label>
+                  <label>
+                    Imagem principal <small>(JPG, PNG ou WEBP; até 5 MB)</small>
+                    <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setImage(e.target.files?.[0] ?? null)} />
+                    {editing?.imageUrl && !image && <small>Manterá a imagem atual se você não escolher uma nova.</small>}
                   </label>
                   <div className="two-columns">
                     <label>

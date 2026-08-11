@@ -18,6 +18,7 @@ public sealed record ListingResponse(
     string Category,
     string CategorySlug,
     string SellerDisplayName,
+    string? ImageUrl,
     DateTime CreatedAtUtc);
 
 public sealed record PagedResponse<T>(IReadOnlyCollection<T> Items, int Page, int PageSize, int TotalCount);
@@ -31,4 +32,5 @@ public sealed record UpsertListingRequest(
     decimal Quantity,
     MaterialCondition Condition,
     string City,
-    string State);
+    string State,
+    IFormFile? Image);
