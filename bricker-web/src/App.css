@@ -346,6 +346,28 @@ h1 {
 .form-grid textarea {
   min-height: 80px;
 }
+.image-field {
+  display: grid;
+  gap: 7px;
+  color: #486052;
+  font-size: 13px;
+  font-weight: 700;
+}
+.image-field small { font-size: 11px; color: #6d7c73; }
+.file-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border: 1px solid #ccd7ce;
+  border-radius: 7px;
+  padding: 5px;
+  background: #fff;
+  cursor: pointer;
+}
+.file-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.file-picker-button { border-radius: 5px; padding: 8px 11px; background: #e8efe2; color: #2e684d; font-size: 12px; white-space: nowrap; }
+.file-picker-name { overflow: hidden; color: #6d7c73; font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .two-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;

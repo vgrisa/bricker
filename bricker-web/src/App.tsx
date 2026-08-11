@@ -477,11 +477,15 @@ function App() {
                       }
                     />
                   </label>
-                  <label>
-                    Imagem principal <small>(JPG, PNG ou WEBP; até 5 MB)</small>
-                    <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setImage(e.target.files?.[0] ?? null)} />
+                  <div className="image-field">
+                    <span>Imagem principal <small>(JPG, PNG ou WEBP; até 5 MB)</small></span>
+                    <label className="file-picker">
+                      <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setImage(e.target.files?.[0] ?? null)} />
+                      <span className="file-picker-button">Escolher imagem</span>
+                      <span className="file-picker-name">{image?.name ?? "Nenhuma imagem selecionada"}</span>
+                    </label>
                     {editing?.imageUrl && !image && <small>Manterá a imagem atual se você não escolher uma nova.</small>}
-                  </label>
+                  </div>
                   <div className="two-columns">
                     <label>
                       Preço (R$)
