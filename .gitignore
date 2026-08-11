@@ -1,0 +1,19 @@
+# Build output
+bin/
+obj/
+node_modules/
+dist/
+.vs/
+
+# Local configuration and generated uploads
+.env
+.env.local
+appsettings.Development.local.json
+uploads/
+
+# Local tooling caches
+work/.dotnet/
+work/.nuget/
+work/npm-cache/
+
+bricker-web/work/
