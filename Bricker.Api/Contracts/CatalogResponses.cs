@@ -19,6 +19,7 @@ public sealed record ListingResponse(
     string CategorySlug,
     string SellerDisplayName,
     string? ImageUrl,
+    IReadOnlyCollection<string> ImageUrls,
     DateTime CreatedAtUtc);
 
 public sealed record PagedResponse<T>(IReadOnlyCollection<T> Items, int Page, int PageSize, int TotalCount);

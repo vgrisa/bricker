@@ -1,43 +1,909 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { Link, NavLink, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { api, fileUrl, type Category, type Detail, type Interest, type Listing, type Profile } from './api'
-import './App.css'
+import { useEffect, useState, type FormEvent } from "react";
+import {
+  Link,
+  NavLink,
+  Navigate,
+  Route,
+  Routes,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import {
+  api,
+  fileUrl,
+  type Category,
+  type Detail,
+  type Interest,
+  type Listing,
+  type Profile,
+} from "./api";
+import "./App.css";
 
-const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-const condition = (value: number) => ['Ótimo estado', 'Bom estado', 'Estado regular'][value] ?? 'Não informado'
+const money = (value: number) =>
+  value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const condition = (value: number) =>
+  ["Ótimo estado", "Bom estado", "Estado regular"][value] ?? "Não informado";
 
-function Layout({ profile, setProfile, children }: { profile: Profile | null; setProfile: (profile: Profile | null) => void; children: React.ReactNode }) {
-  const navigate = useNavigate()
-  const logout = async () => { await api<void>('/auth/logout', { method: 'POST' }); setProfile(null); navigate('/') }
-  return <><header className="site-header"><Link className="brand" to="/">bricker<span>.</span></Link><nav><NavLink to="/materiais">Materiais</NavLink><NavLink to="/anunciar">Anunciar</NavLink>{profile && <NavLink to="/perfil">Meu perfil</NavLink>}</nav><div>{profile ? <><span className="greeting">Olá, {profile.displayName.split(' ')[0]}</span><button className="link-button" onClick={() => void logout()}>Sair</button></> : <Link className="link-button" to="/entrar">Entrar</Link>}<Link className="primary-button" to="/anunciar">Anunciar material</Link></div></header>{children}<footer>bricker. Construção circular, de ponta a ponta.</footer></>
+function Layout({
+  profile,
+  setProfile,
+  children,
+}: {
+  profile: Profile | null;
+  setProfile: (profile: Profile | null) => void;
+  children: React.ReactNode;
+}) {
+  const navigate = useNavigate();
+  const logout = async () => {
+    await api<void>("/auth/logout", { method: "POST" });
+    setProfile(null);
+    navigate("/");
+  };
+  return (
+    <>
+      <header className="site-header">
+        <Link className="brand" to="/">
+          bricker<span>.</span>
+        </Link>
+        <nav>
+          <NavLink to="/materiais">Materiais</NavLink>
+          <NavLink to="/anunciar">Anunciar</NavLink>
+          {profile && <NavLink to="/perfil">Meu perfil</NavLink>}
+        </nav>
+        <div>
+          {profile ? (
+            <>
+              <span className="greeting">
+                Olá, {profile.displayName.split(" ")[0]}
+              </span>
+              <button className="link-button" onClick={() => void logout()}>
+                Sair
+              </button>
+            </>
+          ) : (
+            <Link className="link-button" to="/entrar">
+              Entrar
+            </Link>
+          )}
+          <Link className="primary-button" to="/anunciar">
+            Anunciar material
+          </Link>
+        </div>
+      </header>
+      {children}
+      <footer>bricker. Construção circular, de ponta a ponta.</footer>
+    </>
+  );
 }
 
-function Card({ item }: { item: Listing }) { return <Link to={`/materiais/${item.id}`} className="card"><div className="card-image" style={fileUrl(item.imageUrl) ? { backgroundImage: `url(${fileUrl(item.imageUrl)})` } : undefined}><span>{item.category}</span></div><div className="card-body"><small>{condition(item.condition).toUpperCase()}</small><h3>{item.title}</h3><strong>{money(item.price)} <em>por {item.unit}</em></strong><p>{item.quantity} {item.unit} · {item.city}, {item.state}</p></div></Link> }
+function Card({ item }: { item: Listing }) {
+  const images = item.imageUrls?.length
+    ? item.imageUrls
+    : item.imageUrl
+      ? [item.imageUrl]
+      : [];
+  const [activeImage, setActiveImage] = useState(0);
+  const changeImage = (direction: number) => {
+    setActiveImage(
+      (current) => (current + direction + images.length) % images.length,
+    );
+  };
+  return (
+    <article className="card">
+      <Link to={`/materiais/${item.id}`} className="card-image-link">
+        <div className="card-image">
+          {images[activeImage] ? (
+            <img src={fileUrl(images[activeImage])} alt={item.title} />
+          ) : (
+            <span className="image-placeholder">Sem foto</span>
+          )}
+          <span className="card-category">{item.category}</span>
+        </div>
+      </Link>
+      {images.length > 1 && (
+        <div className="card-carousel-controls">
+          <button
+            type="button"
+            aria-label="Foto anterior"
+            onClick={() => changeImage(-1)}
+          >
+            ‹
+          </button>
+          <span>
+            {activeImage + 1}/{images.length}
+          </span>
+          <button
+            type="button"
+            aria-label="Próxima foto"
+            onClick={() => changeImage(1)}
+          >
+            ›
+          </button>
+        </div>
+      )}
+      <Link to={`/materiais/${item.id}`} className="card-body">
+        <small>{condition(item.condition).toUpperCase()}</small>
+        <h3>{item.title}</h3>
+        <strong>
+          {money(item.price)} <em>por {item.unit}</em>
+        </strong>
+        <p>
+          {item.quantity} {item.unit} · {item.city}, {item.state}
+        </p>
+      </Link>
+    </article>
+  );
+}
 
-function Home() { return <main><section className="hero-new"><p className="eyebrow">MATERIAIS QUE GANHAM NOVO DESTINO</p><h1>Uma obra mais econômica começa com uma escolha inteligente.</h1><p>Compre e anuncie excedentes de construção com segurança, perto de você.</p><div><Link className="primary-button" to="/materiais">Encontrar materiais</Link><Link className="secondary-button" to="/anunciar">Quero anunciar</Link></div></section><section className="feature-row"><article><b>01</b><h3>Encontre</h3><p>Filtre por material, localização e preço.</p></article><article><b>02</b><h3>Conheça</h3><p>Veja fotos, detalhes e o perfil do vendedor.</p></article><article><b>03</b><h3>Construa</h3><p>Combine pelo WhatsApp e reaproveite.</p></article></section></main> }
+function Home() {
+  return (
+    <main>
+      <section className="hero-new">
+        <p className="eyebrow">MATERIAIS QUE GANHAM NOVO DESTINO</p>
+        <h1>Uma obra mais econômica começa com uma escolha inteligente.</h1>
+        <p>
+          Compre e anuncie excedentes de construção com segurança, perto de
+          você.
+        </p>
+        <div>
+          <Link className="primary-button" to="/materiais">
+            Encontrar materiais
+          </Link>
+          <Link className="secondary-button" to="/anunciar">
+            Quero anunciar
+          </Link>
+        </div>
+      </section>
+      <section className="feature-row">
+        <article>
+          <b>01</b>
+          <h3>Encontre</h3>
+          <p>Filtre por material, localização e preço.</p>
+        </article>
+        <article>
+          <b>02</b>
+          <h3>Conheça</h3>
+          <p>Veja fotos, detalhes e o perfil do vendedor.</p>
+        </article>
+        <article>
+          <b>03</b>
+          <h3>Construa</h3>
+          <p>Combine pelo WhatsApp e reaproveite.</p>
+        </article>
+      </section>
+    </main>
+  );
+}
 
 function Catalog() {
-  const [params, setParams] = useSearchParams(); const [items, setItems] = useState<Listing[]>([]); const [categories, setCategories] = useState<Category[]>([]); const [total, setTotal] = useState(0); const [loading, setLoading] = useState(true)
-  useEffect(() => { void api<Category[]>('/categories').then(setCategories) }, [])
-  useEffect(() => { setLoading(true); const query = new URLSearchParams(params); query.set('pageSize', '12'); void api<{ items: Listing[]; totalCount: number }>(`/listings?${query}`).then(result => { setItems(result.items); setTotal(result.totalCount) }).finally(() => setLoading(false)) }, [params])
-  const update = (name: string, value: string) => { const next = new URLSearchParams(params); value ? next.set(name, value) : next.delete(name); setParams(next) }
-  return <main className="page"><p className="eyebrow">CATÁLOGO</p><h1>Materiais disponíveis</h1><div className="catalog-layout"><aside className="filters"><h3>Filtros</h3><label>Buscar<input value={params.get('search') ?? ''} onChange={e => update('search', e.target.value)} placeholder="Ex.: porcelanato" /></label><label>Categoria<select value={params.get('category') ?? ''} onChange={e => update('category', e.target.value)}><option value="">Todas</option>{categories.map(c => <option key={c.id} value={c.slug}>{c.name}</option>)}</select></label><div className="two"><label>Cidade<input value={params.get('city') ?? ''} onChange={e => update('city', e.target.value)} /></label><label>UF<input maxLength={2} value={params.get('state') ?? ''} onChange={e => update('state', e.target.value.toUpperCase())} /></label></div><div className="two"><label>Preço mínimo<input type="number" onChange={e => update('minPrice', e.target.value)} /></label><label>Preço máximo<input type="number" onChange={e => update('maxPrice', e.target.value)} /></label></div><label>Condição<select value={params.get('condition') ?? ''} onChange={e => update('condition', e.target.value)}><option value="">Todas</option><option value="0">Ótimo estado</option><option value="1">Bom estado</option><option value="2">Estado regular</option></select></label></aside><section><div className="results-heading"><span>{total} materiais encontrados</span><select onChange={e => update('sort', e.target.value)}><option value="recent">Mais recentes</option><option value="priceAsc">Menor preço</option><option value="priceDesc">Maior preço</option></select></div>{loading ? <p>Carregando materiais...</p> : items.length ? <div className="card-grid">{items.map(item => <Card key={item.id} item={item} />)}</div> : <div className="empty">Nenhum material encontrado. Ajuste os filtros ou publique o primeiro anúncio.</div>}</section></div></main>
+  const [params, setParams] = useSearchParams();
+  const [items, setItems] = useState<Listing[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    void api<Category[]>("/categories").then(setCategories);
+  }, []);
+  useEffect(() => {
+    setLoading(true);
+    const query = new URLSearchParams(params);
+    query.set("pageSize", "12");
+    void api<{ items: Listing[]; totalCount: number }>(`/listings?${query}`)
+      .then((result) => {
+        setItems(result.items);
+        setTotal(result.totalCount);
+      })
+      .finally(() => setLoading(false));
+  }, [params]);
+  const update = (name: string, value: string) => {
+    const next = new URLSearchParams(params);
+    value ? next.set(name, value) : next.delete(name);
+    setParams(next);
+  };
+  return (
+    <main className="page">
+      <p className="eyebrow">CATÁLOGO</p>
+      <h1>Materiais disponíveis</h1>
+      <div className="catalog-layout">
+        <aside className="filters">
+          <h3>Filtros</h3>
+          <label>
+            Buscar
+            <input
+              value={params.get("search") ?? ""}
+              onChange={(e) => update("search", e.target.value)}
+              placeholder="Ex.: porcelanato"
+            />
+          </label>
+          <label>
+            Categoria
+            <select
+              value={params.get("category") ?? ""}
+              onChange={(e) => update("category", e.target.value)}
+            >
+              <option value="">Todas</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.slug}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="two">
+            <label>
+              Cidade
+              <input
+                value={params.get("city") ?? ""}
+                onChange={(e) => update("city", e.target.value)}
+              />
+            </label>
+            <label>
+              UF
+              <input
+                maxLength={2}
+                value={params.get("state") ?? ""}
+                onChange={(e) => update("state", e.target.value.toUpperCase())}
+              />
+            </label>
+          </div>
+          <div className="two">
+            <label>
+              Preço mínimo
+              <input
+                type="number"
+                onChange={(e) => update("minPrice", e.target.value)}
+              />
+            </label>
+            <label>
+              Preço máximo
+              <input
+                type="number"
+                onChange={(e) => update("maxPrice", e.target.value)}
+              />
+            </label>
+          </div>
+          <label>
+            Condição
+            <select
+              value={params.get("condition") ?? ""}
+              onChange={(e) => update("condition", e.target.value)}
+            >
+              <option value="">Todas</option>
+              <option value="0">Ótimo estado</option>
+              <option value="1">Bom estado</option>
+              <option value="2">Estado regular</option>
+            </select>
+          </label>
+        </aside>
+        <section>
+          <div className="results-heading">
+            <span>{total} materiais encontrados</span>
+            <select onChange={(e) => update("sort", e.target.value)}>
+              <option value="recent">Mais recentes</option>
+              <option value="priceAsc">Menor preço</option>
+              <option value="priceDesc">Maior preço</option>
+            </select>
+          </div>
+          {loading ? (
+            <p>Carregando materiais...</p>
+          ) : items.length ? (
+            <div className="card-grid">
+              {items.map((item) => (
+                <Card key={item.id} item={item} />
+              ))}
+            </div>
+          ) : (
+            <div className="empty">
+              Nenhum material encontrado. Ajuste os filtros ou publique o
+              primeiro anúncio.
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
 }
 
 function DetailPage({ profile }: { profile: Profile | null }) {
-  const { id = '' } = useParams(); const navigate = useNavigate(); const [detail, setDetail] = useState<Detail | null>(null); const [active, setActive] = useState(0); const [message, setMessage] = useState('')
-  useEffect(() => { void api<Detail>(`/listings/${id}/details`).then(setDetail).catch(() => navigate('/materiais')) }, [id, navigate])
-  if (!detail) return <main className="page">Carregando material...</main>
-  const images = detail.images.length ? detail.images : detail.listing.imageUrl ? [{ id: 'cover', url: detail.listing.imageUrl, sortOrder: 0 }] : []
-  const interest = async () => { if (!profile) { navigate('/entrar'); return } try { await api<void>(`/listings/${id}/interests`, { method: 'POST' }); setMessage('Interesse registrado. O anunciante verá seu WhatsApp no painel.') } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível registrar o interesse.') } }
-  return <main className="page detail"><Link to="/materiais" className="back">← Voltar aos materiais</Link><div className="detail-grid"><section><div className="gallery-main" style={images[active] ? { backgroundImage: `url(${fileUrl(images[active].url)})` } : undefined}>{!images.length && <span>Sem imagens</span>}</div>{images.length > 1 && <div className="thumbnails">{images.map((image, index) => <button key={image.id} className={active === index ? 'selected' : ''} onClick={() => setActive(index)} style={{ backgroundImage: `url(${fileUrl(image.url)})` }} />)}</div>}</section><section className="detail-info"><p className="eyebrow">{detail.listing.category}</p><h1>{detail.listing.title}</h1><p className="detail-price">{money(detail.listing.price)} <small>por {detail.listing.unit}</small></p><p>{detail.listing.description}</p><dl><div><dt>Quantidade</dt><dd>{detail.listing.quantity} {detail.listing.unit}</dd></div><div><dt>Condição</dt><dd>{condition(detail.listing.condition)}</dd></div><div><dt>Localização</dt><dd>{detail.listing.city}, {detail.listing.state}</dd></div></dl>{message && <p className="notice">{message}</p>}<button className="primary-button full" onClick={() => void interest()}>Tenho interesse</button><aside className="seller-card"><small>ANUNCIADO POR</small><h3>{detail.seller?.displayName ?? detail.listing.sellerDisplayName}</h3><p>{detail.seller?.city ?? detail.listing.city}, {detail.seller?.state ?? detail.listing.state}</p>{detail.seller && <p>Membro desde {new Date(detail.seller.createdAtUtc).getFullYear()}</p>}</aside></section></div></main>
+  const { id = "" } = useParams();
+  const navigate = useNavigate();
+  const [detail, setDetail] = useState<Detail | null>(null);
+  const [active, setActive] = useState(0);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    void api<Detail>(`/listings/${id}/details`)
+      .then(setDetail)
+      .catch(() => navigate("/materiais"));
+  }, [id, navigate]);
+  if (!detail) return <main className="page">Carregando material...</main>;
+  const images = detail.images.length
+    ? detail.images
+    : detail.listing.imageUrl
+      ? [{ id: "cover", url: detail.listing.imageUrl, sortOrder: 0 }]
+      : [];
+  const changeImage = (direction: number) => {
+    if (images.length < 2) return;
+    setActive(
+      (current) => (current + direction + images.length) % images.length,
+    );
+  };
+  const interest = async () => {
+    if (!profile) {
+      navigate("/entrar");
+      return;
+    }
+    try {
+      await api<void>(`/listings/${id}/interests`, { method: "POST" });
+      setMessage(
+        "Interesse registrado. O anunciante verá seu WhatsApp no painel.",
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível registrar o interesse.",
+      );
+    }
+  };
+  return (
+    <main className="page detail">
+      <Link to="/materiais" className="back">
+        ← Voltar aos materiais
+      </Link>
+      <div className="detail-grid">
+        <section>
+          <div className="gallery-main">
+            {images[active] ? (
+              <img
+                src={fileUrl(images[active].url)}
+                alt={`${detail.listing.title} — foto ${active + 1}`}
+              />
+            ) : (
+              <span>Sem imagens</span>
+            )}
+            {images.length > 1 && (
+              <>
+                <button
+                  className="gallery-arrow previous"
+                  type="button"
+                  aria-label="Foto anterior"
+                  onClick={() => changeImage(-1)}
+                >
+                  ‹
+                </button>
+                <button
+                  className="gallery-arrow next"
+                  type="button"
+                  aria-label="Próxima foto"
+                  onClick={() => changeImage(1)}
+                >
+                  ›
+                </button>
+                <span className="gallery-counter">
+                  {active + 1} / {images.length}
+                </span>
+              </>
+            )}
+          </div>
+          {images.length > 1 && (
+            <div className="thumbnails">
+              {images.map((image, index) => (
+                <button
+                  key={image.id}
+                  className={active === index ? "selected" : ""}
+                  onClick={() => setActive(index)}
+                  style={{ backgroundImage: `url(${fileUrl(image.url)})` }}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+        <section className="detail-info">
+          <p className="eyebrow">{detail.listing.category}</p>
+          <h1>{detail.listing.title}</h1>
+          <p className="detail-price">
+            {money(detail.listing.price)}{" "}
+            <small>por {detail.listing.unit}</small>
+          </p>
+          <p>{detail.listing.description}</p>
+          <dl>
+            <div>
+              <dt>Quantidade</dt>
+              <dd>
+                {detail.listing.quantity} {detail.listing.unit}
+              </dd>
+            </div>
+            <div>
+              <dt>Condição</dt>
+              <dd>{condition(detail.listing.condition)}</dd>
+            </div>
+            <div>
+              <dt>Localização</dt>
+              <dd>
+                {detail.listing.city}, {detail.listing.state}
+              </dd>
+            </div>
+          </dl>
+          {message && <p className="notice">{message}</p>}
+          <button
+            className="primary-button full"
+            onClick={() => void interest()}
+          >
+            Tenho interesse
+          </button>
+          <aside className="seller-card">
+            <small>ANUNCIADO POR</small>
+            <h3>
+              {detail.seller?.displayName ?? detail.listing.sellerDisplayName}
+            </h3>
+            <p>
+              {detail.seller?.city ?? detail.listing.city},{" "}
+              {detail.seller?.state ?? detail.listing.state}
+            </p>
+            {detail.seller && (
+              <p>
+                Membro desde{" "}
+                {new Date(detail.seller.createdAtUtc).getFullYear()}
+              </p>
+            )}
+          </aside>
+        </section>
+      </div>
+    </main>
+  );
 }
 
-function Auth({ setProfile }: { setProfile: (p: Profile) => void }) { const navigate = useNavigate(); const [register, setRegister] = useState(false); const [form, setForm] = useState({ displayName: '', email: '', password: '', city: '', state: '', whatsApp: '' }); const [error, setError] = useState(''); const submit = async (e: FormEvent) => { e.preventDefault(); try { const profile = await api<Profile>(`/auth/${register ? 'register' : 'login'}`, { method: 'POST', body: JSON.stringify(register ? form : { email: form.email, password: form.password }) }); setProfile(profile); navigate('/perfil') } catch (x) { setError(x instanceof Error ? x.message : 'Não foi possível entrar.') } }; return <main className="auth page"><p className="eyebrow">SUA CONTA</p><h1>{register ? 'Crie sua conta' : 'Entre na Bricker'}</h1><form onSubmit={submit}>{register && <label>Nome<input required onChange={e => setForm({ ...form, displayName: e.target.value })} /></label>}<label>E-mail<input required type="email" onChange={e => setForm({ ...form, email: e.target.value })} /></label><label>Senha<input required type="password" minLength={8} onChange={e => setForm({ ...form, password: e.target.value })} /></label>{register && <><label>WhatsApp<input required placeholder="(47) 99999-9999" onChange={e => setForm({ ...form, whatsApp: e.target.value })} /></label><div className="two"><label>Cidade<input onChange={e => setForm({ ...form, city: e.target.value })} /></label><label>UF<input maxLength={2} onChange={e => setForm({ ...form, state: e.target.value.toUpperCase() })} /></label></div></>} {error && <p className="form-error">{error}</p>}<button className="primary-button full">{register ? 'Criar conta' : 'Entrar'}</button></form><button className="link-button" onClick={() => setRegister(!register)}>{register ? 'Já tenho uma conta' : 'Ainda não tenho conta'}</button></main> }
+function Auth({ setProfile }: { setProfile: (p: Profile) => void }) {
+  const navigate = useNavigate();
+  const [register, setRegister] = useState(false);
+  const [form, setForm] = useState({
+    displayName: "",
+    email: "",
+    password: "",
+    city: "",
+    state: "",
+    whatsApp: "",
+  });
+  const [error, setError] = useState("");
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      const profile = await api<Profile>(
+        `/auth/${register ? "register" : "login"}`,
+        {
+          method: "POST",
+          body: JSON.stringify(
+            register ? form : { email: form.email, password: form.password },
+          ),
+        },
+      );
+      setProfile(profile);
+      navigate("/perfil");
+    } catch (x) {
+      setError(x instanceof Error ? x.message : "Não foi possível entrar.");
+    }
+  };
+  return (
+    <main className="auth page">
+      <p className="eyebrow">SUA CONTA</p>
+      <h1>{register ? "Crie sua conta" : "Entre na Bricker"}</h1>
+      <form onSubmit={submit}>
+        {register && (
+          <label>
+            Nome
+            <input
+              required
+              onChange={(e) =>
+                setForm({ ...form, displayName: e.target.value })
+              }
+            />
+          </label>
+        )}
+        <label>
+          E-mail
+          <input
+            required
+            type="email"
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+        </label>
+        <label>
+          Senha
+          <input
+            required
+            type="password"
+            minLength={8}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
+        </label>
+        {register && (
+          <>
+            <label>
+              WhatsApp
+              <input
+                required
+                placeholder="(47) 99999-9999"
+                onChange={(e) => setForm({ ...form, whatsApp: e.target.value })}
+              />
+            </label>
+            <div className="two">
+              <label>
+                Cidade
+                <input
+                  onChange={(e) => setForm({ ...form, city: e.target.value })}
+                />
+              </label>
+              <label>
+                UF
+                <input
+                  maxLength={2}
+                  onChange={(e) =>
+                    setForm({ ...form, state: e.target.value.toUpperCase() })
+                  }
+                />
+              </label>
+            </div>
+          </>
+        )}{" "}
+        {error && <p className="form-error">{error}</p>}
+        <button className="primary-button full">
+          {register ? "Criar conta" : "Entrar"}
+        </button>
+      </form>
+      <button className="link-button" onClick={() => setRegister(!register)}>
+        {register ? "Já tenho uma conta" : "Ainda não tenho conta"}
+      </button>
+    </main>
+  );
+}
 
-function Announce({ profile }: { profile: Profile | null }) { const navigate = useNavigate(); const [categories, setCategories] = useState<Category[]>([]); const [files, setFiles] = useState<File[]>([]); const [error, setError] = useState(''); const [form, setForm] = useState({ categoryId: '', title: '', description: '', price: '', quantity: '', unit: 'unidade', condition: '0', city: profile?.city ?? '', state: profile?.state ?? '' }); useEffect(() => { void api<Category[]>('/categories').then(items => { setCategories(items); setForm(value => ({ ...value, categoryId: items[0]?.id ?? '' })) }) }, []); if (!profile) return <Navigate to="/entrar" />; const submit = async (e: FormEvent) => { e.preventDefault(); if (files.length > 5) return setError('Você pode enviar no máximo 5 fotos.'); const data = new FormData(); Object.entries(form).forEach(([key, value]) => data.append(key, value)); files.forEach(file => data.append('images', file)); try { const listing = await api<Listing>('/listings', { method: 'POST', body: data }); navigate(`/materiais/${listing.id}`) } catch (x) { setError(x instanceof Error ? x.message : 'Não foi possível publicar.') } }; return <main className="page form-page"><p className="eyebrow">ANUNCIAR MATERIAL</p><h1>Publique seu excedente</h1><p>Fotos claras e informações completas ajudam seu material a encontrar uma nova obra.</p><form onSubmit={submit}><label>Categoria<select value={form.categoryId} onChange={e => setForm({ ...form, categoryId: e.target.value })}>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Título<input required value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} /></label><label>Descrição<textarea required value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></label><label className="upload-zone">Adicionar fotos (até 5)<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e => setFiles(Array.from(e.target.files ?? []))} /><span>{files.length ? `${files.length} foto(s) selecionada(s)` : 'JPG, PNG ou WEBP · até 5 MB por foto'}</span></label><div className="two"><label>Preço (R$)<input required type="number" min=".01" step=".01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} /></label><label>Quantidade<input required type="number" min=".01" step=".01" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} /></label></div><div className="two"><label>Unidade<input required value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} /></label><label>Condição<select value={form.condition} onChange={e => setForm({ ...form, condition: e.target.value })}><option value="0">Ótimo estado</option><option value="1">Bom estado</option><option value="2">Estado regular</option></select></label></div><div className="two"><label>Cidade<input required value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} /></label><label>UF<input required maxLength={2} value={form.state} onChange={e => setForm({ ...form, state: e.target.value.toUpperCase() })} /></label></div>{error && <p className="form-error">{error}</p>}<button className="primary-button">Publicar material</button></form></main> }
+function Announce({ profile }: { profile: Profile | null }) {
+  const navigate = useNavigate();
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({
+    categoryId: "",
+    title: "",
+    description: "",
+    price: "",
+    quantity: "",
+    unit: "unidade",
+    condition: "0",
+    city: profile?.city ?? "",
+    state: profile?.state ?? "",
+  });
+  useEffect(() => {
+    void api<Category[]>("/categories").then((items) => {
+      setCategories(items);
+      setForm((value) => ({ ...value, categoryId: items[0]?.id ?? "" }));
+    });
+  }, []);
+  if (!profile) return <Navigate to="/entrar" />;
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (files.length > 5)
+      return setError("Você pode enviar no máximo 5 fotos.");
+    const data = new FormData();
+    Object.entries(form).forEach(([key, value]) => data.append(key, value));
+    files.forEach((file) => data.append("images", file));
+    try {
+      const listing = await api<Listing>("/listings", {
+        method: "POST",
+        body: data,
+      });
+      navigate(`/materiais/${listing.id}`);
+    } catch (x) {
+      setError(x instanceof Error ? x.message : "Não foi possível publicar.");
+    }
+  };
+  return (
+    <main className="page form-page">
+      <p className="eyebrow">ANUNCIAR MATERIAL</p>
+      <h1>Publique seu excedente</h1>
+      <p>
+        Fotos claras e informações completas ajudam seu material a encontrar uma
+        nova obra.
+      </p>
+      <form onSubmit={submit}>
+        <label>
+          Categoria
+          <select
+            value={form.categoryId}
+            onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+          >
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Título
+          <input
+            required
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+          />
+        </label>
+        <label>
+          Descrição
+          <textarea
+            required
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+        </label>
+        <label className="upload-zone">
+          Adicionar fotos (até 5)
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+          />
+          <span>
+            {files.length
+              ? `${files.length} foto(s) selecionada(s)`
+              : "JPG, PNG ou WEBP · até 5 MB por foto"}
+          </span>
+        </label>
+        <div className="two">
+          <label>
+            Preço (R$)
+            <input
+              required
+              type="number"
+              min=".01"
+              step=".01"
+              value={form.price}
+              onChange={(e) => setForm({ ...form, price: e.target.value })}
+            />
+          </label>
+          <label>
+            Quantidade
+            <input
+              required
+              type="number"
+              min=".01"
+              step=".01"
+              value={form.quantity}
+              onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+            />
+          </label>
+        </div>
+        <div className="two">
+          <label>
+            Unidade
+            <input
+              required
+              value={form.unit}
+              onChange={(e) => setForm({ ...form, unit: e.target.value })}
+            />
+          </label>
+          <label>
+            Condição
+            <select
+              value={form.condition}
+              onChange={(e) => setForm({ ...form, condition: e.target.value })}
+            >
+              <option value="0">Ótimo estado</option>
+              <option value="1">Bom estado</option>
+              <option value="2">Estado regular</option>
+            </select>
+          </label>
+        </div>
+        <div className="two">
+          <label>
+            Cidade
+            <input
+              required
+              value={form.city}
+              onChange={(e) => setForm({ ...form, city: e.target.value })}
+            />
+          </label>
+          <label>
+            UF
+            <input
+              required
+              maxLength={2}
+              value={form.state}
+              onChange={(e) =>
+                setForm({ ...form, state: e.target.value.toUpperCase() })
+              }
+            />
+          </label>
+        </div>
+        {error && <p className="form-error">{error}</p>}
+        <button className="primary-button">Publicar material</button>
+      </form>
+    </main>
+  );
+}
 
-function ProfilePage({ profile, setProfile }: { profile: Profile | null; setProfile: (p: Profile) => void }) { const [mine, setMine] = useState<Listing[]>([]); const [interests, setInterests] = useState<Interest[]>([]); const [editing, setEditing] = useState(false); const [form, setForm] = useState(profile); useEffect(() => { if (profile) { void api<Listing[]>('/listings/mine').then(setMine); void api<Interest[]>('/listings/mine/interests').then(setInterests) } }, [profile]); if (!profile || !form) return <Navigate to="/entrar" />; const save = async (e: FormEvent) => { e.preventDefault(); const updated = await api<Profile>('/profile', { method: 'PUT', body: JSON.stringify({ displayName: form.displayName, city: form.city, state: form.state, whatsApp: form.whatsApp }) }); setProfile(updated); setEditing(false) }; return <main className="page profile-page"><p className="eyebrow">MEU PERFIL</p><div className="section-title"><h1>{profile.displayName}</h1><button className="secondary-button" onClick={() => setEditing(!editing)}>Editar perfil</button></div>{editing && <form className="profile-form" onSubmit={save}><label>Nome<input value={form.displayName} onChange={e => setForm({ ...form, displayName: e.target.value })} /></label><label>WhatsApp<input value={form.whatsApp ?? ''} onChange={e => setForm({ ...form, whatsApp: e.target.value })} /></label><div className="two"><label>Cidade<input value={form.city ?? ''} onChange={e => setForm({ ...form, city: e.target.value })} /></label><label>UF<input maxLength={2} value={form.state ?? ''} onChange={e => setForm({ ...form, state: e.target.value.toUpperCase() })} /></label></div><button className="primary-button">Salvar perfil</button></form>}<section><div className="section-title"><h2>Meus materiais</h2><Link className="primary-button" to="/anunciar">Novo anúncio</Link></div><div className="my-list">{mine.length ? mine.map(item => <Card key={item.id} item={item} />) : <p className="empty">Você ainda não publicou materiais.</p>}</div></section><section><h2>Interesses recebidos</h2>{interests.length ? <div className="interest-list">{interests.map(item => <article key={item.id}><strong>{item.listingTitle}</strong><span>{item.displayName} · {item.email}</span>{item.whatsApp && <a href={`https://wa.me/${item.whatsApp.replace(/\D/g, '')}`} target="_blank">Conversar no WhatsApp</a>}</article>)}</div> : <p className="empty">Quando alguém se interessar pelos seus materiais, o contato aparecerá aqui.</p>}</section></main> }
+function ProfilePage({
+  profile,
+  setProfile,
+}: {
+  profile: Profile | null;
+  setProfile: (p: Profile) => void;
+}) {
+  const [mine, setMine] = useState<Listing[]>([]);
+  const [interests, setInterests] = useState<Interest[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState(profile);
+  useEffect(() => {
+    if (profile) {
+      void api<Listing[]>("/listings/mine").then(setMine);
+      void api<Interest[]>("/listings/mine/interests").then(setInterests);
+    }
+  }, [profile]);
+  if (!profile || !form) return <Navigate to="/entrar" />;
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    const updated = await api<Profile>("/profile", {
+      method: "PUT",
+      body: JSON.stringify({
+        displayName: form.displayName,
+        city: form.city,
+        state: form.state,
+        whatsApp: form.whatsApp,
+      }),
+    });
+    setProfile(updated);
+    setEditing(false);
+  };
+  return (
+    <main className="page profile-page">
+      <section className="profile-hero">
+        <div className="profile-avatar">
+          {profile.displayName.charAt(0).toUpperCase()}
+        </div>
+        <div className="profile-identity">
+          <p className="eyebrow">MEU PERFIL</p>
+          <h1>{profile.displayName}</h1>
+          <p>
+            {profile.email} · {profile.city || "Cidade não informada"}
+            {profile.state ? `, ${profile.state}` : ""}
+          </p>
+        </div>
+        <button
+          className="secondary-button"
+          onClick={() => setEditing(!editing)}
+        >
+          {editing ? "Cancelar edição" : "Editar perfil"}
+        </button>
+      </section>
+      {editing && (
+        <form className="profile-form profile-edit-card" onSubmit={save}>
+          <div className="form-heading">
+            <div>
+              <span>INFORMAÇÕES PESSOAIS</span>
+              <h2>Atualize seu perfil</h2>
+            </div>
+            <p>
+              Seu WhatsApp só aparece para anunciantes quando você demonstra
+              interesse.
+            </p>
+          </div>
+          <label>
+            Nome
+            <input
+              value={form.displayName}
+              onChange={(e) =>
+                setForm({ ...form, displayName: e.target.value })
+              }
+            />
+          </label>
+          <label>
+            WhatsApp
+            <input
+              value={form.whatsApp ?? ""}
+              onChange={(e) => setForm({ ...form, whatsApp: e.target.value })}
+            />
+          </label>
+          <div className="two">
+            <label>
+              Cidade
+              <input
+                value={form.city ?? ""}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+              />
+            </label>
+            <label>
+              UF
+              <input
+                maxLength={2}
+                value={form.state ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, state: e.target.value.toUpperCase() })
+                }
+              />
+            </label>
+          </div>
+          <button className="primary-button">Salvar perfil</button>
+        </form>
+      )}
+      <section className="profile-section">
+        <div className="section-title profile-section-heading">
+          <div>
+            <span className="section-kicker">SEUS ANÚNCIOS</span>
+            <h2>Meus materiais</h2>
+          </div>
+          <Link className="primary-button" to="/anunciar">
+            + Novo anúncio
+          </Link>
+        </div>
+        <div className="my-list">
+          {mine.length ? (
+            mine.map((item) => <Card key={item.id} item={item} />)
+          ) : (
+            <p className="empty">Você ainda não publicou materiais.</p>
+          )}
+        </div>
+      </section>
+      <section className="profile-section">
+        <div className="profile-section-heading">
+          <span className="section-kicker">CONTATOS</span>
+          <h2>Interesses recebidos</h2>
+        </div>
+        {interests.length ? (
+          <div className="interest-list">
+            {interests.map((item) => (
+              <article key={item.id}>
+                <strong>{item.listingTitle}</strong>
+                <span>
+                  {item.displayName} · {item.email}
+                </span>
+                {item.whatsApp && (
+                  <a
+                    href={`https://wa.me/${item.whatsApp.replace(/\D/g, "")}`}
+                    target="_blank"
+                  >
+                    Conversar no WhatsApp
+                  </a>
+                )}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="empty">
+            Quando alguém se interessar pelos seus materiais, o contato
+            aparecerá aqui.
+          </p>
+        )}
+      </section>
+    </main>
+  );
+}
 
-function App() { const [profile, setProfile] = useState<Profile | null>(null); useEffect(() => { void api<Profile>('/profile').then(setProfile).catch(() => {}) }, []); return <Layout profile={profile} setProfile={setProfile}><Routes><Route path="/" element={<Home />} /><Route path="/materiais" element={<Catalog />} /><Route path="/materiais/:id" element={<DetailPage profile={profile} />} /><Route path="/anunciar" element={<Announce profile={profile} />} /><Route path="/perfil" element={<ProfilePage profile={profile} setProfile={setProfile} />} /><Route path="/entrar" element={<Auth setProfile={setProfile} />} /><Route path="*" element={<Navigate to="/" />} /></Routes></Layout> }
-export default App
+function App() {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  useEffect(() => {
+    void api<Profile>("/profile")
+      .then(setProfile)
+      .catch(() => {});
+  }, []);
+  return (
+    <Layout profile={profile} setProfile={setProfile}>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/materiais" element={<Catalog />} />
+        <Route
+          path="/materiais/:id"
+          element={<DetailPage profile={profile} />}
+        />
+        <Route path="/anunciar" element={<Announce profile={profile} />} />
+        <Route
+          path="/perfil"
+          element={<ProfilePage profile={profile} setProfile={setProfile} />}
+        />
+        <Route path="/entrar" element={<Auth setProfile={setProfile} />} />
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
+    </Layout>
+  );
+}
+export default App;

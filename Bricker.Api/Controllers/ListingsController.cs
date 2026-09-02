@@ -29,7 +29,7 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 50);
 
-        var query = db.Listings.AsNoTracking().Include(listing => listing.Category)
+        var query = db.Listings.AsNoTracking().Include(listing => listing.Category).Include(listing => listing.Images)
             .Where(listing => listing.Status == ListingStatus.Active);
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -39,8 +39,8 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         }
 
         if (!string.IsNullOrWhiteSpace(category)) query = query.Where(listing => listing.Category.Slug == category.Trim().ToLower());
-        if (!string.IsNullOrWhiteSpace(city)) query = query.Where(listing => listing.City == city.Trim());
-        if (!string.IsNullOrWhiteSpace(state)) query = query.Where(listing => listing.State == state.Trim().ToUpper());
+        if (!string.IsNullOrWhiteSpace(city)) query = query.Where(listing => listing.City.StartsWith(city.Trim()));
+        if (!string.IsNullOrWhiteSpace(state)) query = query.Where(listing => listing.State.StartsWith(state.Trim().ToUpper()));
         if (minPrice is not null) query = query.Where(listing => listing.Price >= minPrice);
         if (maxPrice is not null) query = query.Where(listing => listing.Price <= maxPrice);
         if (condition is not null) query = query.Where(listing => listing.Condition == condition);
@@ -52,11 +52,11 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
             "priceDesc" => query.OrderByDescending(listing => listing.Price),
             _ => query.OrderByDescending(listing => listing.CreatedAtUtc)
         };
-        var items = await query
+        var entities = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(listing => ToResponse(listing))
             .ToListAsync(cancellationToken);
+        var items = entities.Select(ToResponse).ToList();
 
         return Ok(new PagedResponse<ListingResponse>(items, page, pageSize, totalCount));
     }
@@ -64,10 +64,9 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ListingResponse>> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var listing = await db.Listings.AsNoTracking().Include(item => item.Category)
-            .Where(item => item.Id == id && item.Status == ListingStatus.Active)
-            .Select(item => ToResponse(item))
-            .SingleOrDefaultAsync(cancellationToken);
+        var entity = await db.Listings.AsNoTracking().Include(item => item.Category).Include(item => item.Images)
+            .SingleOrDefaultAsync(item => item.Id == id && item.Status == ListingStatus.Active, cancellationToken);
+        var listing = entity is null ? null : ToResponse(entity);
 
         return listing is null ? NotFound() : Ok(listing);
     }
@@ -89,11 +88,11 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     public async Task<ActionResult<IReadOnlyCollection<ListingResponse>>> Mine(CancellationToken cancellationToken)
     {
         var userId = userManager.GetUserId(User);
-        var listings = await db.Listings.AsNoTracking().Include(listing => listing.Category)
+        var entities = await db.Listings.AsNoTracking().Include(listing => listing.Category).Include(listing => listing.Images)
             .Where(listing => listing.SellerId == userId)
             .OrderByDescending(listing => listing.CreatedAtUtc)
-            .Select(listing => ToResponse(listing))
             .ToListAsync(cancellationToken);
+        var listings = entities.Select(ToResponse).ToList();
 
         return Ok(listings);
     }
@@ -232,7 +231,8 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     private static ListingResponse ToResponse(Listing listing) => new(
         listing.Id, listing.Title, listing.Description, listing.Price, listing.Unit, listing.Quantity,
         listing.Condition, listing.Status, listing.City, listing.State, listing.Category.Name,
-        listing.Category.Slug, listing.SellerDisplayName, listing.ImageUrl, listing.CreatedAtUtc);
+        listing.Category.Slug, listing.SellerDisplayName, listing.ImageUrl,
+        listing.Images.OrderBy(image => image.SortOrder).Select(image => image.Url).ToList(), listing.CreatedAtUtc);
 
     private async Task AddImages(Listing listing, IReadOnlyCollection<IFormFile>? images, CancellationToken cancellationToken)
     {
