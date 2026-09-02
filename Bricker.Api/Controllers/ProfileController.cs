@@ -33,6 +33,7 @@ public sealed class ProfileController(UserManager<AppUser> userManager) : Contro
         user.DisplayName = request.DisplayName.Trim();
         user.City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
         user.State = string.IsNullOrWhiteSpace(request.State) ? null : request.State.Trim().ToUpperInvariant();
+        user.WhatsApp = string.IsNullOrWhiteSpace(request.WhatsApp) ? null : request.WhatsApp.Trim();
         var result = await userManager.UpdateAsync(user);
 
         foreach (var error in result.Errors)
@@ -43,5 +44,5 @@ public sealed class ProfileController(UserManager<AppUser> userManager) : Contro
         return result.Succeeded ? Ok(ToResponse(user)) : ValidationProblem(ModelState);
     }
 
-    private static ProfileResponse ToResponse(AppUser user) => new(user.Id, user.DisplayName, user.Email!, user.City, user.State);
+    private static ProfileResponse ToResponse(AppUser user) => new(user.Id, user.DisplayName, user.Email!, user.City, user.State, user.WhatsApp, user.CreatedAtUtc);
 }

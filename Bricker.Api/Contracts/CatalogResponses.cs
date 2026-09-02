@@ -33,4 +33,10 @@ public sealed record UpsertListingRequest(
     MaterialCondition Condition,
     string City,
     string State,
-    IFormFile? Image);
+    List<IFormFile>? Images);
+
+public sealed record ListingImageResponse(Guid Id, string Url, int SortOrder);
+public sealed record SellerResponse(string DisplayName, string? City, string? State, DateTime CreatedAtUtc);
+public sealed record ListingDetailResponse(ListingResponse Listing, IReadOnlyCollection<ListingImageResponse> Images, SellerResponse? Seller);
+public sealed record ReorderImagesRequest(IReadOnlyCollection<Guid> ImageIds);
+public sealed record InterestResponse(Guid Id, Guid ListingId, string ListingTitle, string DisplayName, string Email, string? WhatsApp, DateTime CreatedAtUtc);

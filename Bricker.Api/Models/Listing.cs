@@ -21,6 +21,8 @@ public sealed class Listing
     public byte[] RowVersion { get; init; } = [];
     public Category Category { get; set; } = null!;
     public AppUser? Seller { get; init; }
+    public ICollection<ListingImage> Images { get; init; } = new List<ListingImage>();
+    public ICollection<ListingInterest> Interests { get; init; } = new List<ListingInterest>();
 }
 
 public enum MaterialCondition { Excellent, Good, Fair }

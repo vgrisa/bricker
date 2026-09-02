@@ -8,6 +8,8 @@ public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options)
 {
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Listing> Listings => Set<Listing>();
+    public DbSet<ListingImage> ListingImages => Set<ListingImage>();
+    public DbSet<ListingInterest> ListingInterests => Set<ListingInterest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -51,6 +53,14 @@ public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options)
                 .WithMany()
                 .HasForeignKey(listing => listing.SellerId)
                 .OnDelete(DeleteBehavior.SetNull);
+            entity.HasMany(listing => listing.Images)
+                .WithOne(image => image.Listing)
+                .HasForeignKey(image => image.ListingId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(listing => listing.Interests)
+                .WithOne(interest => interest.Listing)
+                .HasForeignKey(interest => interest.ListingId)
+                .OnDelete(DeleteBehavior.Cascade);
             entity.HasData(
                 new Listing
                 {
@@ -100,6 +110,23 @@ public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options)
                     SellerDisplayName = "Obra residencial",
                     CreatedAtUtc = SeedIds.CreatedAtUtc
                 });
+        });
+
+        modelBuilder.Entity<ListingImage>(entity =>
+        {
+            entity.ToTable("ListingImages");
+            entity.HasKey(image => image.Id);
+            entity.Property(image => image.Url).HasMaxLength(260).IsRequired();
+            entity.HasIndex(image => new { image.ListingId, image.SortOrder });
+        });
+
+        modelBuilder.Entity<ListingInterest>(entity =>
+        {
+            entity.ToTable("ListingInterests");
+            entity.HasKey(interest => interest.Id);
+            entity.Property(interest => interest.InterestedUserId).HasMaxLength(450).IsRequired();
+            entity.HasIndex(interest => new { interest.ListingId, interest.InterestedUserId }).IsUnique();
+            entity.HasOne(interest => interest.InterestedUser).WithMany().HasForeignKey(interest => interest.InterestedUserId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

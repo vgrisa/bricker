@@ -26,7 +26,8 @@ public sealed class AuthController(UserManager<AppUser> userManager, SignInManag
             Email = request.Email.Trim(),
             DisplayName = request.DisplayName.Trim(),
             City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim(),
-            State = string.IsNullOrWhiteSpace(request.State) ? null : request.State.Trim().ToUpperInvariant()
+            State = string.IsNullOrWhiteSpace(request.State) ? null : request.State.Trim().ToUpperInvariant(),
+            WhatsApp = string.IsNullOrWhiteSpace(request.WhatsApp) ? null : request.WhatsApp.Trim()
         };
 
         var result = await userManager.CreateAsync(user, request.Password);
@@ -61,5 +62,5 @@ public sealed class AuthController(UserManager<AppUser> userManager, SignInManag
         return NoContent();
     }
 
-    private static ProfileResponse ToResponse(AppUser user) => new(user.Id, user.DisplayName, user.Email!, user.City, user.State);
+    private static ProfileResponse ToResponse(AppUser user) => new(user.Id, user.DisplayName, user.Email!, user.City, user.State, user.WhatsApp, user.CreatedAtUtc);
 }

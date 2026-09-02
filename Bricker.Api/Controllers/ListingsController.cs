@@ -20,6 +20,8 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         [FromQuery] string? state,
         [FromQuery] decimal? minPrice,
         [FromQuery] decimal? maxPrice,
+        [FromQuery] MaterialCondition? condition,
+        [FromQuery] string? sort,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 12,
         CancellationToken cancellationToken = default)
@@ -41,9 +43,16 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         if (!string.IsNullOrWhiteSpace(state)) query = query.Where(listing => listing.State == state.Trim().ToUpper());
         if (minPrice is not null) query = query.Where(listing => listing.Price >= minPrice);
         if (maxPrice is not null) query = query.Where(listing => listing.Price <= maxPrice);
+        if (condition is not null) query = query.Where(listing => listing.Condition == condition);
 
         var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query.OrderByDescending(listing => listing.CreatedAtUtc)
+        query = sort switch
+        {
+            "priceAsc" => query.OrderBy(listing => listing.Price),
+            "priceDesc" => query.OrderByDescending(listing => listing.Price),
+            _ => query.OrderByDescending(listing => listing.CreatedAtUtc)
+        };
+        var items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(listing => ToResponse(listing))
@@ -61,6 +70,18 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
             .SingleOrDefaultAsync(cancellationToken);
 
         return listing is null ? NotFound() : Ok(listing);
+    }
+
+    [HttpGet("{id:guid}/details")]
+    public async Task<ActionResult<ListingDetailResponse>> Details(Guid id, CancellationToken cancellationToken)
+    {
+        var listing = await db.Listings.AsNoTracking().Include(item => item.Category).Include(item => item.Images).Include(item => item.Seller)
+            .SingleOrDefaultAsync(item => item.Id == id && item.Status == ListingStatus.Active, cancellationToken);
+        if (listing is null) return NotFound();
+        var images = listing.Images.OrderBy(image => image.SortOrder).Select(image => new ListingImageResponse(image.Id, image.Url, image.SortOrder)).ToList();
+        if (images.Count == 0 && listing.ImageUrl is not null) images.Add(new ListingImageResponse(Guid.Empty, listing.ImageUrl, 0));
+        var seller = listing.Seller is null ? null : new SellerResponse(listing.Seller.DisplayName, listing.Seller.City, listing.Seller.State, listing.Seller.CreatedAtUtc);
+        return Ok(new ListingDetailResponse(ToResponse(listing), images, seller));
     }
 
     [Authorize]
@@ -108,9 +129,9 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
             State = request.State.Trim().ToUpperInvariant(),
             SellerId = user.Id,
             SellerDisplayName = user.DisplayName,
-            ImageUrl = await SaveImage(request.Image, cancellationToken)
+            ImageUrl = null
         };
-
+        await AddImages(listing, request.Images, cancellationToken);
         db.Listings.Add(listing);
         await db.SaveChangesAsync(cancellationToken);
         listing.Category = category;
@@ -147,12 +168,7 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         listing.Condition = request.Condition;
         listing.City = request.City.Trim();
         listing.State = request.State.Trim().ToUpperInvariant();
-        var imageUrl = await SaveImage(request.Image, cancellationToken);
-        if (imageUrl is not null)
-        {
-            DeleteImage(listing.ImageUrl);
-            listing.ImageUrl = imageUrl;
-        }
+        await AddImages(listing, request.Images, cancellationToken);
         listing.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
@@ -169,6 +185,34 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
 
         listing.Status = ListingStatus.Inactive;
         listing.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [Authorize]
+    [HttpDelete("{id:guid}/images/{imageId:guid}")]
+    public async Task<IActionResult> RemoveImage(Guid id, Guid imageId, CancellationToken cancellationToken)
+    {
+        var userId = userManager.GetUserId(User);
+        var image = await db.ListingImages.Include(item => item.Listing).SingleOrDefaultAsync(item => item.Id == imageId && item.ListingId == id && item.Listing.SellerId == userId, cancellationToken);
+        if (image is null) return NotFound();
+        DeleteImage(image.Url);
+        db.ListingImages.Remove(image);
+        if (image.Listing.ImageUrl == image.Url) image.Listing.ImageUrl = await db.ListingImages.Where(item => item.ListingId == id && item.Id != imageId).OrderBy(item => item.SortOrder).Select(item => item.Url).FirstOrDefaultAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [Authorize]
+    [HttpPut("{id:guid}/images/order")]
+    public async Task<IActionResult> ReorderImages(Guid id, ReorderImagesRequest request, CancellationToken cancellationToken)
+    {
+        var userId = userManager.GetUserId(User);
+        var listing = await db.Listings.Include(item => item.Images).SingleOrDefaultAsync(item => item.Id == id && item.SellerId == userId, cancellationToken);
+        if (listing is null) return NotFound();
+        if (request.ImageIds.Count != listing.Images.Count || request.ImageIds.Distinct().Count() != request.ImageIds.Count || request.ImageIds.Except(listing.Images.Select(image => image.Id)).Any()) return BadRequest(new { message = "A ordem das imagens é inválida." });
+        foreach (var image in listing.Images) image.SortOrder = request.ImageIds.ToList().IndexOf(image.Id);
+        listing.ImageUrl = listing.Images.OrderBy(image => image.SortOrder).FirstOrDefault()?.Url;
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
@@ -190,25 +234,31 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         listing.Condition, listing.Status, listing.City, listing.State, listing.Category.Name,
         listing.Category.Slug, listing.SellerDisplayName, listing.ImageUrl, listing.CreatedAtUtc);
 
-    private async Task<string?> SaveImage(IFormFile? image, CancellationToken cancellationToken)
+    private async Task AddImages(Listing listing, IReadOnlyCollection<IFormFile>? images, CancellationToken cancellationToken)
     {
-        if (image is null || image.Length == 0) return null;
-        if (image.Length > 5 * 1024 * 1024) throw new BadHttpRequestException("A imagem deve ter no máximo 5 MB.");
+        if (images is null || images.Count == 0) return;
+        var existingCount = listing.Images.Count + await db.ListingImages.CountAsync(item => item.ListingId == listing.Id, cancellationToken);
+        if (existingCount + images.Count > 5) throw new BadHttpRequestException("Um anúncio pode ter no máximo 5 imagens.");
+        foreach (var image in images.Where(image => image.Length > 0))
+        {
+            if (image.Length > 5 * 1024 * 1024) throw new BadHttpRequestException("Cada imagem deve ter no máximo 5 MB.");
 
         var extensions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["image/jpeg"] = ".jpg", ["image/png"] = ".png", ["image/webp"] = ".webp"
         };
-        if (!extensions.TryGetValue(image.ContentType, out var extension))
-            throw new BadHttpRequestException("Envie uma imagem JPG, PNG ou WEBP.");
+            if (!extensions.TryGetValue(image.ContentType, out var extension)) throw new BadHttpRequestException("Envie imagens JPG, PNG ou WEBP.");
 
-        var relativeFolder = Path.Combine("uploads", "listings");
-        var folder = Path.Combine(environment.ContentRootPath, relativeFolder);
-        Directory.CreateDirectory(folder);
-        var fileName = $"{Guid.NewGuid():N}{extension}";
-        await using var stream = System.IO.File.Create(Path.Combine(folder, fileName));
-        await image.CopyToAsync(stream, cancellationToken);
-        return $"/{relativeFolder.Replace('\\', '/')}/{fileName}";
+            var relativeFolder = Path.Combine("uploads", "listings");
+            var folder = Path.Combine(environment.ContentRootPath, relativeFolder);
+            Directory.CreateDirectory(folder);
+            var fileName = $"{Guid.NewGuid():N}{extension}";
+            await using var stream = System.IO.File.Create(Path.Combine(folder, fileName));
+            await image.CopyToAsync(stream, cancellationToken);
+            var url = $"/{relativeFolder.Replace('\\', '/')}/{fileName}";
+            listing.Images.Add(new ListingImage { Url = url, SortOrder = existingCount++ });
+            listing.ImageUrl ??= url;
+        }
     }
 
     private void DeleteImage(string? imageUrl)
