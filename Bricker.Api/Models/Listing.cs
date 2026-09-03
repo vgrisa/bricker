@@ -13,6 +13,11 @@ public sealed class Listing
     public ListingStatus Status { get; set; } = ListingStatus.Draft;
     public required string City { get; set; }
     public required string State { get; set; }
+    public string? PostalCode { get; set; }
+    public string? Street { get; set; }
+    public string? Neighborhood { get; set; }
+    public string? AddressNumber { get; set; }
+    public string? AddressComplement { get; set; }
     public required string SellerDisplayName { get; set; }
     public string? ImageUrl { get; set; }
     public string? SellerId { get; init; }
@@ -23,6 +28,7 @@ public sealed class Listing
     public AppUser? Seller { get; init; }
     public ICollection<ListingImage> Images { get; init; } = new List<ListingImage>();
     public ICollection<ListingInterest> Interests { get; init; } = new List<ListingInterest>();
+    public ICollection<ListingFavorite> Favorites { get; init; } = new List<ListingFavorite>();
 }
 
 public enum MaterialCondition { Excellent, Good, Fair }

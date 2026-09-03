@@ -15,6 +15,11 @@ export type Listing = {
   status: number;
   city: string;
   state: string;
+  postalCode?: string;
+  street?: string;
+  neighborhood?: string;
+  addressNumber?: string;
+  addressComplement?: string;
   category: string;
   categorySlug: string;
   sellerDisplayName: string;
@@ -51,6 +56,7 @@ export type Interest = {
   whatsApp?: string;
   createdAtUtc: string;
 };
+export type SentInterest = { id: string; listingId: string; listingTitle: string; listingStatus: number; sellerDisplayName: string; imageUrl?: string; createdAtUtc: string };
 
 export async function api<T>(path: string, options: RequestInit = {}) {
   const response = await fetch(`${apiUrl}${path}`, {

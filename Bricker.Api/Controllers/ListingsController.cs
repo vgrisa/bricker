@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Bricker.Api.Validation;
 
 namespace Bricker.Api.Controllers;
 
@@ -18,6 +19,8 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         [FromQuery] string? category,
         [FromQuery] string? city,
         [FromQuery] string? state,
+        [FromQuery] string? neighborhood,
+        [FromQuery] string? postalCode,
         [FromQuery] decimal? minPrice,
         [FromQuery] decimal? maxPrice,
         [FromQuery] MaterialCondition? condition,
@@ -28,6 +31,8 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 50);
+        if (search?.Length > 160 || city?.Length > 100 || state?.Length > 2 || neighborhood?.Length > 100 || postalCode?.Length > 9)
+            return BadRequest(new { message = "Um ou mais filtros excedem o tamanho permitido." });
 
         var query = db.Listings.AsNoTracking().Include(listing => listing.Category).Include(listing => listing.Images)
             .Where(listing => listing.Status == ListingStatus.Active);
@@ -41,6 +46,12 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         if (!string.IsNullOrWhiteSpace(category)) query = query.Where(listing => listing.Category.Slug == category.Trim().ToLower());
         if (!string.IsNullOrWhiteSpace(city)) query = query.Where(listing => listing.City.StartsWith(city.Trim()));
         if (!string.IsNullOrWhiteSpace(state)) query = query.Where(listing => listing.State.StartsWith(state.Trim().ToUpper()));
+        if (!string.IsNullOrWhiteSpace(neighborhood)) query = query.Where(listing => listing.Neighborhood != null && listing.Neighborhood.StartsWith(neighborhood.Trim()));
+        if (!string.IsNullOrWhiteSpace(postalCode))
+        {
+            var digits = InputValidation.Digits(postalCode);
+            query = query.Where(listing => listing.PostalCode != null && listing.PostalCode.StartsWith(digits));
+        }
         if (minPrice is not null) query = query.Where(listing => listing.Price >= minPrice);
         if (maxPrice is not null) query = query.Where(listing => listing.Price <= maxPrice);
         if (condition is not null) query = query.Where(listing => listing.Condition == condition);
@@ -103,6 +114,8 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     {
         var validation = Validate(request);
         if (validation is not null) return validation;
+        if (request.Images is null || request.Images.Count == 0)
+            return BadRequest(new { message = "Adicione pelo menos uma foto ao anúncio." });
 
         var category = await db.Categories.SingleOrDefaultAsync(item => item.Id == request.CategoryId && item.IsActive, cancellationToken);
         if (category is null)
@@ -126,6 +139,11 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
             Status = ListingStatus.Active,
             City = request.City.Trim(),
             State = request.State.Trim().ToUpperInvariant(),
+            PostalCode = InputValidation.Digits(request.PostalCode),
+            Street = request.Street!.Trim(),
+            Neighborhood = request.Neighborhood!.Trim(),
+            AddressNumber = request.AddressNumber!.Trim(),
+            AddressComplement = string.IsNullOrWhiteSpace(request.AddressComplement) ? null : request.AddressComplement.Trim(),
             SellerId = user.Id,
             SellerDisplayName = user.DisplayName,
             ImageUrl = null
@@ -146,8 +164,8 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         if (validation is not null) return validation;
 
         var userId = userManager.GetUserId(User);
-        var listing = await db.Listings.Include(item => item.Category)
-            .SingleOrDefaultAsync(item => item.Id == id && item.SellerId == userId, cancellationToken);
+        var listing = await db.Listings.Include(item => item.Category).Include(item => item.Images)
+            .SingleOrDefaultAsync(item => item.Id == id && item.SellerId == userId && item.Status == ListingStatus.Active, cancellationToken);
         if (listing is null) return NotFound();
 
         var category = await db.Categories.SingleOrDefaultAsync(item => item.Id == request.CategoryId && item.IsActive, cancellationToken);
@@ -167,7 +185,26 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         listing.Condition = request.Condition;
         listing.City = request.City.Trim();
         listing.State = request.State.Trim().ToUpperInvariant();
-        await AddImages(listing, request.Images, cancellationToken);
+        listing.PostalCode = InputValidation.Digits(request.PostalCode);
+        listing.Street = request.Street!.Trim();
+        listing.Neighborhood = request.Neighborhood!.Trim();
+        listing.AddressNumber = request.AddressNumber!.Trim();
+        listing.AddressComplement = string.IsNullOrWhiteSpace(request.AddressComplement) ? null : request.AddressComplement.Trim();
+        if (request.NewCoverIndex is int newCoverIndex)
+        {
+            if (newCoverIndex < 0 || newCoverIndex >= (request.Images?.Count ?? 0))
+                return BadRequest(new { message = "A foto de capa selecionada é inválida." });
+        }
+        var addedImages = await AddImages(listing, request.Images, cancellationToken);
+        if (request.NewCoverIndex is int selectedCoverIndex)
+        {
+            var cover = addedImages[selectedCoverIndex];
+            var orderedImages = listing.Images.OrderBy(image => image.SortOrder).ToList();
+            orderedImages.Remove(cover);
+            orderedImages.Insert(0, cover);
+            for (var index = 0; index < orderedImages.Count; index++) orderedImages[index].SortOrder = index;
+            listing.ImageUrl = cover.Url;
+        }
         listing.UpdatedAtUtc = DateTime.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
@@ -189,12 +226,29 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     }
 
     [Authorize]
+    [HttpPut("{id:guid}/status")]
+    public async Task<IActionResult> UpdateStatus(Guid id, UpdateListingStatusRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Status is not (ListingStatus.Active or ListingStatus.Reserved or ListingStatus.Sold or ListingStatus.Inactive))
+            return BadRequest(new { message = "Status inválido." });
+        var userId = userManager.GetUserId(User);
+        var listing = await db.Listings.SingleOrDefaultAsync(item => item.Id == id && item.SellerId == userId, cancellationToken);
+        if (listing is null) return NotFound();
+        listing.Status = request.Status;
+        listing.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [Authorize]
     [HttpDelete("{id:guid}/images/{imageId:guid}")]
     public async Task<IActionResult> RemoveImage(Guid id, Guid imageId, CancellationToken cancellationToken)
     {
         var userId = userManager.GetUserId(User);
         var image = await db.ListingImages.Include(item => item.Listing).SingleOrDefaultAsync(item => item.Id == imageId && item.ListingId == id && item.Listing.SellerId == userId, cancellationToken);
         if (image is null) return NotFound();
+        if (await db.ListingImages.CountAsync(item => item.ListingId == id, cancellationToken) <= 1)
+            return BadRequest(new { message = "O anúncio precisa manter pelo menos uma foto." });
         DeleteImage(image.Url);
         db.ListingImages.Remove(image);
         if (image.Listing.ImageUrl == image.Url) image.Listing.ImageUrl = await db.ListingImages.Where(item => item.ListingId == id && item.Id != imageId).OrderBy(item => item.SortOrder).Select(item => item.Url).FirstOrDefaultAsync(cancellationToken);
@@ -219,25 +273,39 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     private ActionResult? Validate(UpsertListingRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Title)) ModelState.AddModelError(nameof(request.Title), "Informe um título.");
+        else if (request.Title.Trim().Length is < 5 or > 160) ModelState.AddModelError(nameof(request.Title), "O título deve ter entre 5 e 160 caracteres.");
         if (string.IsNullOrWhiteSpace(request.Description)) ModelState.AddModelError(nameof(request.Description), "Informe uma descrição.");
+        else if (request.Description.Trim().Length is < 20 or > 2_000) ModelState.AddModelError(nameof(request.Description), "A descrição deve ter entre 20 e 2.000 caracteres.");
         if (string.IsNullOrWhiteSpace(request.Unit)) ModelState.AddModelError(nameof(request.Unit), "Informe uma unidade.");
+        else if (request.Unit.Trim().Length > 24) ModelState.AddModelError(nameof(request.Unit), "A unidade deve ter no máximo 24 caracteres.");
         if (string.IsNullOrWhiteSpace(request.City)) ModelState.AddModelError(nameof(request.City), "Informe uma cidade.");
-        if (string.IsNullOrWhiteSpace(request.State) || request.State.Trim().Length != 2) ModelState.AddModelError(nameof(request.State), "Informe a UF com duas letras.");
+        else if (request.City.Trim().Length is < 2 or > 100) ModelState.AddModelError(nameof(request.City), "A cidade deve ter entre 2 e 100 caracteres.");
+        if (!InputValidation.IsValidState(request.State)) ModelState.AddModelError(nameof(request.State), "Informe a UF com duas letras.");
+        if (!InputValidation.IsValidPostalCode(request.PostalCode)) ModelState.AddModelError(nameof(request.PostalCode), "Informe um CEP válido com 8 números.");
+        if (string.IsNullOrWhiteSpace(request.Street) || request.Street.Trim().Length is < 2 or > 150) ModelState.AddModelError(nameof(request.Street), "Informe um logradouro válido.");
+        if (string.IsNullOrWhiteSpace(request.Neighborhood) || request.Neighborhood.Trim().Length is < 2 or > 100) ModelState.AddModelError(nameof(request.Neighborhood), "Informe um bairro válido.");
+        if (string.IsNullOrWhiteSpace(request.AddressNumber) || request.AddressNumber.Trim().Length > 20) ModelState.AddModelError(nameof(request.AddressNumber), "Informe o número do endereço.");
+        if (request.AddressComplement?.Trim().Length > 100) ModelState.AddModelError(nameof(request.AddressComplement), "O complemento deve ter no máximo 100 caracteres.");
         if (request.Price <= 0) ModelState.AddModelError(nameof(request.Price), "O preço deve ser maior que zero.");
+        else if (request.Price > 9_999_999_999.99m) ModelState.AddModelError(nameof(request.Price), "O preço informado é muito alto.");
         if (request.Quantity <= 0) ModelState.AddModelError(nameof(request.Quantity), "A quantidade deve ser maior que zero.");
+        else if (request.Quantity > 9_999_999_999.99m) ModelState.AddModelError(nameof(request.Quantity), "A quantidade informada é muito alta.");
+        if (!Enum.IsDefined(request.Condition)) ModelState.AddModelError(nameof(request.Condition), "Condição inválida.");
         return ModelState.IsValid ? null : ValidationProblem(ModelState);
     }
 
     private static ListingResponse ToResponse(Listing listing) => new(
         listing.Id, listing.Title, listing.Description, listing.Price, listing.Unit, listing.Quantity,
-        listing.Condition, listing.Status, listing.City, listing.State, listing.Category.Name,
+        listing.Condition, listing.Status, listing.City, listing.State, listing.PostalCode,
+        listing.Street, listing.Neighborhood, listing.AddressNumber, listing.AddressComplement, listing.Category.Name,
         listing.Category.Slug, listing.SellerDisplayName, listing.ImageUrl,
         listing.Images.OrderBy(image => image.SortOrder).Select(image => image.Url).ToList(), listing.CreatedAtUtc);
 
-    private async Task AddImages(Listing listing, IReadOnlyCollection<IFormFile>? images, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<ListingImage>> AddImages(Listing listing, IReadOnlyCollection<IFormFile>? images, CancellationToken cancellationToken)
     {
-        if (images is null || images.Count == 0) return;
-        var existingCount = listing.Images.Count + await db.ListingImages.CountAsync(item => item.ListingId == listing.Id, cancellationToken);
+        if (images is null || images.Count == 0) return [];
+        var addedImages = new List<ListingImage>();
+        var existingCount = await db.ListingImages.CountAsync(item => item.ListingId == listing.Id, cancellationToken);
         if (existingCount + images.Count > 5) throw new BadHttpRequestException("Um anúncio pode ter no máximo 5 imagens.");
         foreach (var image in images.Where(image => image.Length > 0))
         {
@@ -256,9 +324,12 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
             await using var stream = System.IO.File.Create(Path.Combine(folder, fileName));
             await image.CopyToAsync(stream, cancellationToken);
             var url = $"/{relativeFolder.Replace('\\', '/')}/{fileName}";
-            listing.Images.Add(new ListingImage { Url = url, SortOrder = existingCount++ });
+            var listingImage = new ListingImage { Url = url, SortOrder = existingCount++ };
+            listing.Images.Add(listingImage);
+            addedImages.Add(listingImage);
             listing.ImageUrl ??= url;
         }
+        return addedImages;
     }
 
     private void DeleteImage(string? imageUrl)

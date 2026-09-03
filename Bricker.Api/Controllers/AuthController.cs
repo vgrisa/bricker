@@ -3,6 +3,7 @@ using Bricker.Api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Bricker.Api.Validation;
 
 namespace Bricker.Api.Controllers;
 
@@ -13,10 +14,18 @@ public sealed class AuthController(UserManager<AppUser> userManager, SignInManag
     [HttpPost("register")]
     public async Task<ActionResult<ProfileResponse>> Register(RegisterRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.DisplayName))
-        {
-            ModelState.AddModelError(nameof(request.DisplayName), "Informe um nome de exibição.");
-        }
+        if (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Trim().Length is < 2 or > 100)
+            ModelState.AddModelError(nameof(request.DisplayName), "O nome deve ter entre 2 e 100 caracteres.");
+        if (!InputValidation.IsValidEmail(request.Email))
+            ModelState.AddModelError(nameof(request.Email), "Informe um e-mail válido.");
+        if (string.IsNullOrEmpty(request.Password) || request.Password.Length is < 8 or > 128)
+            ModelState.AddModelError(nameof(request.Password), "A senha deve ter entre 8 e 128 caracteres.");
+        if (!string.IsNullOrWhiteSpace(request.City) && request.City.Trim().Length > 100)
+            ModelState.AddModelError(nameof(request.City), "A cidade deve ter no máximo 100 caracteres.");
+        if (!string.IsNullOrWhiteSpace(request.State) && !InputValidation.IsValidState(request.State))
+            ModelState.AddModelError(nameof(request.State), "Informe a UF com duas letras.");
+        if (!string.IsNullOrWhiteSpace(request.WhatsApp) && !InputValidation.IsValidWhatsApp(request.WhatsApp))
+            ModelState.AddModelError(nameof(request.WhatsApp), "Informe um WhatsApp com DDD e 10 ou 11 números.");
 
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
@@ -27,7 +36,7 @@ public sealed class AuthController(UserManager<AppUser> userManager, SignInManag
             DisplayName = request.DisplayName.Trim(),
             City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim(),
             State = string.IsNullOrWhiteSpace(request.State) ? null : request.State.Trim().ToUpperInvariant(),
-            WhatsApp = string.IsNullOrWhiteSpace(request.WhatsApp) ? null : request.WhatsApp.Trim()
+            WhatsApp = string.IsNullOrWhiteSpace(request.WhatsApp) ? null : InputValidation.Digits(request.WhatsApp)
         };
 
         var result = await userManager.CreateAsync(user, request.Password);
@@ -44,6 +53,8 @@ public sealed class AuthController(UserManager<AppUser> userManager, SignInManag
     [HttpPost("login")]
     public async Task<ActionResult<ProfileResponse>> Login(LoginRequest request)
     {
+        if (!InputValidation.IsValidEmail(request.Email) || string.IsNullOrEmpty(request.Password) || request.Password.Length > 128)
+            return Unauthorized(new { message = "E-mail ou senha inválidos." });
         var user = await userManager.FindByEmailAsync(request.Email.Trim());
         if (user is null || !await userManager.CheckPasswordAsync(user, request.Password))
         {

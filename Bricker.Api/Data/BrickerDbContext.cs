@@ -10,6 +10,7 @@ public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options)
     public DbSet<Listing> Listings => Set<Listing>();
     public DbSet<ListingImage> ListingImages => Set<ListingImage>();
     public DbSet<ListingInterest> ListingInterests => Set<ListingInterest>();
+    public DbSet<ListingFavorite> ListingFavorites => Set<ListingFavorite>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +42,11 @@ public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options)
             entity.Property(listing => listing.Unit).HasMaxLength(24).IsRequired();
             entity.Property(listing => listing.City).HasMaxLength(100).IsRequired();
             entity.Property(listing => listing.State).HasMaxLength(2).IsRequired();
+            entity.Property(listing => listing.PostalCode).HasMaxLength(8);
+            entity.Property(listing => listing.Street).HasMaxLength(150);
+            entity.Property(listing => listing.Neighborhood).HasMaxLength(100);
+            entity.Property(listing => listing.AddressNumber).HasMaxLength(20);
+            entity.Property(listing => listing.AddressComplement).HasMaxLength(100);
             entity.Property(listing => listing.SellerDisplayName).HasMaxLength(100).IsRequired();
             entity.Property(listing => listing.SellerId).HasMaxLength(450);
             entity.Property(listing => listing.RowVersion).IsRowVersion();
@@ -60,6 +66,10 @@ public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options)
             entity.HasMany(listing => listing.Interests)
                 .WithOne(interest => interest.Listing)
                 .HasForeignKey(interest => interest.ListingId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(listing => listing.Favorites)
+                .WithOne(favorite => favorite.Listing)
+                .HasForeignKey(favorite => favorite.ListingId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasData(
                 new Listing
@@ -127,6 +137,15 @@ public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options)
             entity.Property(interest => interest.InterestedUserId).HasMaxLength(450).IsRequired();
             entity.HasIndex(interest => new { interest.ListingId, interest.InterestedUserId }).IsUnique();
             entity.HasOne(interest => interest.InterestedUser).WithMany().HasForeignKey(interest => interest.InterestedUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ListingFavorite>(entity =>
+        {
+            entity.ToTable("ListingFavorites");
+            entity.HasKey(favorite => favorite.Id);
+            entity.Property(favorite => favorite.UserId).HasMaxLength(450).IsRequired();
+            entity.HasIndex(favorite => new { favorite.ListingId, favorite.UserId }).IsUnique();
+            entity.HasOne(favorite => favorite.User).WithMany().HasForeignKey(favorite => favorite.UserId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

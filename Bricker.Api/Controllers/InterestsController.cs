@@ -39,4 +39,16 @@ public sealed class InterestsController(BrickerDbContext db, UserManager<AppUser
             .ToListAsync(cancellationToken);
         return Ok(interests);
     }
+
+    [HttpGet("interests/sent")]
+    public async Task<ActionResult<IReadOnlyCollection<SentInterestResponse>>> Sent(CancellationToken cancellationToken)
+    {
+        var userId = userManager.GetUserId(User);
+        var interests = await db.ListingInterests.AsNoTracking().Include(item => item.Listing)
+            .Where(item => item.InterestedUserId == userId)
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .Select(item => new SentInterestResponse(item.Id, item.ListingId, item.Listing.Title, item.Listing.Status, item.Listing.SellerDisplayName, item.Listing.ImageUrl, item.CreatedAtUtc))
+            .ToListAsync(cancellationToken);
+        return Ok(interests);
+    }
 }

@@ -3,6 +3,7 @@ using Bricker.Api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Bricker.Api.Validation;
 
 namespace Bricker.Api.Controllers;
 
@@ -21,11 +22,15 @@ public sealed class ProfileController(UserManager<AppUser> userManager) : Contro
     [HttpPut]
     public async Task<ActionResult<ProfileResponse>> Update(UpdateProfileRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.DisplayName))
-        {
-            ModelState.AddModelError(nameof(request.DisplayName), "Informe um nome de exibição.");
-            return ValidationProblem(ModelState);
-        }
+        if (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Trim().Length is < 2 or > 100)
+            ModelState.AddModelError(nameof(request.DisplayName), "O nome deve ter entre 2 e 100 caracteres.");
+        if (!string.IsNullOrWhiteSpace(request.City) && request.City.Trim().Length > 100)
+            ModelState.AddModelError(nameof(request.City), "A cidade deve ter no máximo 100 caracteres.");
+        if (!string.IsNullOrWhiteSpace(request.State) && !InputValidation.IsValidState(request.State))
+            ModelState.AddModelError(nameof(request.State), "Informe a UF com duas letras.");
+        if (!string.IsNullOrWhiteSpace(request.WhatsApp) && !InputValidation.IsValidWhatsApp(request.WhatsApp))
+            ModelState.AddModelError(nameof(request.WhatsApp), "Informe um WhatsApp com DDD e 10 ou 11 números.");
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
         var user = await userManager.GetUserAsync(User);
         if (user is null) return Unauthorized();
@@ -33,7 +38,7 @@ public sealed class ProfileController(UserManager<AppUser> userManager) : Contro
         user.DisplayName = request.DisplayName.Trim();
         user.City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
         user.State = string.IsNullOrWhiteSpace(request.State) ? null : request.State.Trim().ToUpperInvariant();
-        user.WhatsApp = string.IsNullOrWhiteSpace(request.WhatsApp) ? null : request.WhatsApp.Trim();
+        user.WhatsApp = string.IsNullOrWhiteSpace(request.WhatsApp) ? null : InputValidation.Digits(request.WhatsApp);
         var result = await userManager.UpdateAsync(user);
 
         foreach (var error in result.Errors)
