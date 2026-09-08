@@ -100,8 +100,13 @@ export function ConversationsPage({ profile }: { profile: Profile | null }) {
     if (!profile) return;
     const connection = connectHub();
     connection.on("ConversationUpdated", load);
-    void connection.start().catch(() => undefined);
-    return () => void connection.stop();
+    const startTimer = window.setTimeout(() => {
+      void connection.start().catch(() => undefined);
+    });
+    return () => {
+      window.clearTimeout(startTimer);
+      void connection.stop();
+    };
   }, [load, profile]);
   if (!profile) return <Navigate to="/entrar" />;
 
@@ -182,14 +187,26 @@ export function ConversationPage({ profile }: { profile: Profile | null }) {
       ));
     });
     connection.onreconnected(() => connection.invoke("JoinConversation", id));
-    void connection.start().then(() => connection.invoke("JoinConversation", id)).catch(() => setError("O chat em tempo real está se reconectando."));
+    let disposed = false;
+    const startTimer = window.setTimeout(() => {
+      if (disposed) return;
+      void connection.start()
+        .then(() => connection.invoke("JoinConversation", id))
+        .catch(() => {
+          if (!disposed) setError("O chat em tempo real está se reconectando.");
+        });
+    });
     return () => {
+      disposed = true;
+      window.clearTimeout(startTimer);
       connectionRef.current = null;
       void connection.stop();
     };
   }, [id, markRead, navigate, profile]);
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), [messages.length]);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
   if (!profile) return <Navigate to="/entrar" />;
 
   const send = async (event: FormEvent) => {

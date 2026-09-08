@@ -21,8 +21,11 @@ export function useUnreadCount(profile: Profile | null) {
     connection.on("ConversationUpdated", refresh);
     const handleRefresh = () => refresh();
     window.addEventListener("bricker:unread-changed", handleRefresh);
-    void connection.start().catch(() => undefined);
+    const startTimer = window.setTimeout(() => {
+      void connection.start().catch(() => undefined);
+    });
     return () => {
+      window.clearTimeout(startTimer);
       window.removeEventListener("bricker:unread-changed", handleRefresh);
       void connection.stop();
     };
