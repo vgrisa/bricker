@@ -25,7 +25,10 @@ public sealed record ListingResponse(
     string SellerDisplayName,
     string? ImageUrl,
     IReadOnlyCollection<string> ImageUrls,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc)
+{
+    public bool HasConfirmedSale { get; init; }
+}
 
 public sealed record PagedResponse<T>(IReadOnlyCollection<T> Items, int Page, int PageSize, int TotalCount);
 
@@ -48,9 +51,9 @@ public sealed record UpsertListingRequest(
     int? NewCoverIndex);
 
 public sealed record ListingImageResponse(Guid Id, string Url, int SortOrder);
-public sealed record SellerResponse(string DisplayName, string? City, string? State, DateTime CreatedAtUtc);
+public sealed record SellerResponse(string? Id, string DisplayName, string? City, string? State, double? Rating, int ReviewCount, DateTime CreatedAtUtc);
 public sealed record ListingDetailResponse(ListingResponse Listing, IReadOnlyCollection<ListingImageResponse> Images, SellerResponse? Seller);
 public sealed record ReorderImagesRequest(IReadOnlyCollection<Guid> ImageIds);
-public sealed record InterestResponse(Guid Id, Guid ListingId, string ListingTitle, string DisplayName, string Email, string? WhatsApp, DateTime CreatedAtUtc);
-public sealed record SentInterestResponse(Guid Id, Guid ListingId, string ListingTitle, ListingStatus ListingStatus, string SellerDisplayName, string? ImageUrl, DateTime CreatedAtUtc);
+public sealed record InterestResponse(Guid Id, Guid ListingId, Guid? ConversationId, string UserId, string ListingTitle, string DisplayName, DateTime CreatedAtUtc);
+public sealed record SentInterestResponse(Guid Id, Guid ListingId, Guid? ConversationId, string ListingTitle, ListingStatus ListingStatus, string SellerDisplayName, string? ImageUrl, DateTime CreatedAtUtc);
 public sealed record UpdateListingStatusRequest(ListingStatus Status);

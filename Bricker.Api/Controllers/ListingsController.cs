@@ -90,7 +90,14 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         if (listing is null) return NotFound();
         var images = listing.Images.OrderBy(image => image.SortOrder).Select(image => new ListingImageResponse(image.Id, image.Url, image.SortOrder)).ToList();
         if (images.Count == 0 && listing.ImageUrl is not null) images.Add(new ListingImageResponse(Guid.Empty, listing.ImageUrl, 0));
-        var seller = listing.Seller is null ? null : new SellerResponse(listing.Seller.DisplayName, listing.Seller.City, listing.Seller.State, listing.Seller.CreatedAtUtc);
+        SellerResponse? seller = null;
+        if (listing.Seller is not null)
+        {
+            var reviewQuery = db.UserReviews.AsNoTracking().Where(review => review.RevieweeId == listing.Seller.Id);
+            var reviewCount = await reviewQuery.CountAsync(cancellationToken);
+            var rating = reviewCount == 0 ? null : await reviewQuery.AverageAsync(review => (double?)review.Rating, cancellationToken);
+            seller = new SellerResponse(listing.Seller.Id, listing.Seller.DisplayName, listing.Seller.City, listing.Seller.State, rating, reviewCount, listing.Seller.CreatedAtUtc);
+        }
         return Ok(new ListingDetailResponse(ToResponse(listing), images, seller));
     }
 
@@ -99,7 +106,7 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     public async Task<ActionResult<IReadOnlyCollection<ListingResponse>>> Mine(CancellationToken cancellationToken)
     {
         var userId = userManager.GetUserId(User);
-        var entities = await db.Listings.AsNoTracking().Include(listing => listing.Category).Include(listing => listing.Images)
+        var entities = await db.Listings.AsNoTracking().Include(listing => listing.Category).Include(listing => listing.Images).Include(listing => listing.Sale)
             .Where(listing => listing.SellerId == userId)
             .OrderByDescending(listing => listing.CreatedAtUtc)
             .ToListAsync(cancellationToken);
@@ -229,15 +236,49 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     [HttpPut("{id:guid}/status")]
     public async Task<IActionResult> UpdateStatus(Guid id, UpdateListingStatusRequest request, CancellationToken cancellationToken)
     {
-        if (request.Status is not (ListingStatus.Active or ListingStatus.Reserved or ListingStatus.Sold or ListingStatus.Inactive))
+        if (request.Status is ListingStatus.Sold)
+            return BadRequest(new { message = "Selecione o comprador para concluir a venda." });
+        if (request.Status is not (ListingStatus.Active or ListingStatus.Reserved or ListingStatus.Inactive))
             return BadRequest(new { message = "Status inválido." });
         var userId = userManager.GetUserId(User);
-        var listing = await db.Listings.SingleOrDefaultAsync(item => item.Id == id && item.SellerId == userId, cancellationToken);
+        var listing = await db.Listings.Include(item => item.Sale).SingleOrDefaultAsync(item => item.Id == id && item.SellerId == userId, cancellationToken);
         if (listing is null) return NotFound();
+        if (listing.Sale is not null) return Conflict(new { message = "Uma venda confirmada não pode ter o status alterado." });
         listing.Status = request.Status;
         listing.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
+    }
+
+    [Authorize]
+    [HttpPost("{id:guid}/complete-sale")]
+    public async Task<ActionResult<SaleResponse>> CompleteSale(Guid id, CompleteSaleRequest request, CancellationToken cancellationToken)
+    {
+        var userId = userManager.GetUserId(User)!;
+        var listing = await db.Listings.Include(item => item.Sale)
+            .SingleOrDefaultAsync(item => item.Id == id && item.SellerId == userId, cancellationToken);
+        if (listing is null) return NotFound();
+        if (listing.Sale is not null) return Conflict(new { message = "A venda deste anúncio já foi confirmada." });
+        if (listing.Status is ListingStatus.Draft or ListingStatus.Inactive)
+            return Conflict(new { message = "Ative o anúncio antes de concluir a venda." });
+        var interest = await db.ListingInterests.Include(item => item.InterestedUser)
+            .SingleOrDefaultAsync(item => item.Id == request.InterestId && item.ListingId == id, cancellationToken);
+        if (interest is null) return BadRequest(new { message = "Selecione um interessado válido deste anúncio." });
+        var seller = await userManager.GetUserAsync(User);
+        if (seller is null) return Unauthorized();
+        var sale = new ListingSale
+        {
+            ListingId = id,
+            ListingInterestId = interest.Id,
+            BuyerId = interest.InterestedUserId,
+            SellerId = userId
+        };
+        listing.Status = ListingStatus.Sold;
+        listing.UpdatedAtUtc = DateTime.UtcNow;
+        db.ListingSales.Add(sale);
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(new SaleResponse(sale.Id, id, listing.Title, sale.BuyerId, interest.InterestedUser.DisplayName,
+            sale.SellerId, seller.DisplayName, sale.ConfirmedAtUtc));
     }
 
     [Authorize]
@@ -299,7 +340,8 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         listing.Condition, listing.Status, listing.City, listing.State, listing.PostalCode,
         listing.Street, listing.Neighborhood, listing.AddressNumber, listing.AddressComplement, listing.Category.Name,
         listing.Category.Slug, listing.SellerDisplayName, listing.ImageUrl,
-        listing.Images.OrderBy(image => image.SortOrder).Select(image => image.Url).ToList(), listing.CreatedAtUtc);
+        listing.Images.OrderBy(image => image.SortOrder).Select(image => image.Url).ToList(), listing.CreatedAtUtc)
+        { HasConfirmedSale = listing.Sale is not null };
 
     private async Task<IReadOnlyList<ListingImage>> AddImages(Listing listing, IReadOnlyCollection<IFormFile>? images, CancellationToken cancellationToken)
     {

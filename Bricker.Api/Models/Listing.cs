@@ -29,6 +29,8 @@ public sealed class Listing
     public ICollection<ListingImage> Images { get; init; } = new List<ListingImage>();
     public ICollection<ListingInterest> Interests { get; init; } = new List<ListingInterest>();
     public ICollection<ListingFavorite> Favorites { get; init; } = new List<ListingFavorite>();
+    public ICollection<Conversation> Conversations { get; init; } = new List<Conversation>();
+    public ListingSale? Sale { get; init; }
 }
 
 public enum MaterialCondition { Excellent, Good, Fair }

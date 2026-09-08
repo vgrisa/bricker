@@ -8,4 +8,6 @@ public sealed class ListingInterest
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
     public Listing Listing { get; init; } = null!;
     public AppUser InterestedUser { get; init; } = null!;
+    public Conversation? Conversation { get; init; }
+    public ListingSale? Sale { get; init; }
 }

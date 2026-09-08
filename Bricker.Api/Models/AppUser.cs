@@ -8,5 +8,6 @@ public sealed class AppUser : IdentityUser
     public string? City { get; set; }
     public string? State { get; set; }
     public string? WhatsApp { get; set; }
+    public bool RequiresProfileCompletion { get; set; }
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
 }

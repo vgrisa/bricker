@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace Bricker.Api.Controllers;
 
@@ -14,18 +15,37 @@ namespace Bricker.Api.Controllers;
 public sealed class InterestsController(BrickerDbContext db, UserManager<AppUser> userManager) : ControllerBase
 {
     [HttpPost("{id:guid}/interests")]
-    public async Task<IActionResult> Create(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<InterestCreatedResponse>> Create(Guid id, CancellationToken cancellationToken)
     {
         var user = await userManager.GetUserAsync(User);
         if (user is null) return Unauthorized();
-        if (string.IsNullOrWhiteSpace(user.WhatsApp)) return BadRequest(new { message = "Informe seu WhatsApp no perfil antes de demonstrar interesse." });
         var listing = await db.Listings.SingleOrDefaultAsync(item => item.Id == id && item.Status == ListingStatus.Active, cancellationToken);
         if (listing is null) return NotFound();
         if (listing.SellerId == user.Id) return BadRequest(new { message = "Você não pode demonstrar interesse no próprio anúncio." });
-        if (await db.ListingInterests.AnyAsync(item => item.ListingId == id && item.InterestedUserId == user.Id, cancellationToken)) return Conflict(new { message = "Seu interesse já foi registrado neste anúncio." });
-        db.ListingInterests.Add(new ListingInterest { ListingId = id, InterestedUserId = user.Id });
+        if (string.IsNullOrWhiteSpace(listing.SellerId)) return BadRequest(new { message = "Este anúncio não possui um vendedor disponível para conversa." });
+
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var interest = await db.ListingInterests.Include(item => item.Conversation)
+            .SingleOrDefaultAsync(item => item.ListingId == id && item.InterestedUserId == user.Id, cancellationToken);
+        if (interest?.Conversation is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return Ok(new InterestCreatedResponse(interest.Id, interest.Conversation.Id));
+        }
+
+        interest ??= new ListingInterest { ListingId = id, InterestedUserId = user.Id };
+        if (db.Entry(interest).State == EntityState.Detached) db.ListingInterests.Add(interest);
+        var conversation = new Conversation
+        {
+            ListingInterestId = interest.Id,
+            ListingId = listing.Id,
+            BuyerId = user.Id,
+            SellerId = listing.SellerId
+        };
+        db.Conversations.Add(conversation);
         await db.SaveChangesAsync(cancellationToken);
-        return NoContent();
+        await transaction.CommitAsync(cancellationToken);
+        return Ok(new InterestCreatedResponse(interest.Id, conversation.Id));
     }
 
     [HttpGet("mine/interests")]
@@ -35,7 +55,7 @@ public sealed class InterestsController(BrickerDbContext db, UserManager<AppUser
         var interests = await db.ListingInterests.AsNoTracking().Include(item => item.Listing).Include(item => item.InterestedUser)
             .Where(item => item.Listing.SellerId == userId)
             .OrderByDescending(item => item.CreatedAtUtc)
-            .Select(item => new InterestResponse(item.Id, item.ListingId, item.Listing.Title, item.InterestedUser.DisplayName, item.InterestedUser.Email!, item.InterestedUser.WhatsApp, item.CreatedAtUtc))
+            .Select(item => new InterestResponse(item.Id, item.ListingId, item.Conversation == null ? null : item.Conversation.Id, item.InterestedUserId, item.Listing.Title, item.InterestedUser.DisplayName, item.CreatedAtUtc))
             .ToListAsync(cancellationToken);
         return Ok(interests);
     }
@@ -47,7 +67,7 @@ public sealed class InterestsController(BrickerDbContext db, UserManager<AppUser
         var interests = await db.ListingInterests.AsNoTracking().Include(item => item.Listing)
             .Where(item => item.InterestedUserId == userId)
             .OrderByDescending(item => item.CreatedAtUtc)
-            .Select(item => new SentInterestResponse(item.Id, item.ListingId, item.Listing.Title, item.Listing.Status, item.Listing.SellerDisplayName, item.Listing.ImageUrl, item.CreatedAtUtc))
+            .Select(item => new SentInterestResponse(item.Id, item.ListingId, item.Conversation == null ? null : item.Conversation.Id, item.Listing.Title, item.Listing.Status, item.Listing.SellerDisplayName, item.Listing.ImageUrl, item.CreatedAtUtc))
             .ToListAsync(cancellationToken);
         return Ok(interests);
     }

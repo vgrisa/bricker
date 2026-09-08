@@ -11,6 +11,10 @@ public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options)
     public DbSet<ListingImage> ListingImages => Set<ListingImage>();
     public DbSet<ListingInterest> ListingInterests => Set<ListingInterest>();
     public DbSet<ListingFavorite> ListingFavorites => Set<ListingFavorite>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<ListingSale> ListingSales => Set<ListingSale>();
+    public DbSet<UserReview> UserReviews => Set<UserReview>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -146,6 +150,66 @@ public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options)
             entity.Property(favorite => favorite.UserId).HasMaxLength(450).IsRequired();
             entity.HasIndex(favorite => new { favorite.ListingId, favorite.UserId }).IsUnique();
             entity.HasOne(favorite => favorite.User).WithMany().HasForeignKey(favorite => favorite.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Conversation>(entity =>
+        {
+            entity.ToTable("Conversations");
+            entity.HasKey(conversation => conversation.Id);
+            entity.Property(conversation => conversation.BuyerId).HasMaxLength(450).IsRequired();
+            entity.Property(conversation => conversation.SellerId).HasMaxLength(450).IsRequired();
+            entity.HasIndex(conversation => conversation.ListingInterestId).IsUnique();
+            entity.HasIndex(conversation => new { conversation.BuyerId, conversation.LastMessageAtUtc });
+            entity.HasIndex(conversation => new { conversation.SellerId, conversation.LastMessageAtUtc });
+            entity.HasOne(conversation => conversation.ListingInterest).WithOne(interest => interest.Conversation)
+                .HasForeignKey<Conversation>(conversation => conversation.ListingInterestId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(conversation => conversation.Listing).WithMany(listing => listing.Conversations)
+                .HasForeignKey(conversation => conversation.ListingId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne(conversation => conversation.Buyer).WithMany().HasForeignKey(conversation => conversation.BuyerId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne(conversation => conversation.Seller).WithMany().HasForeignKey(conversation => conversation.SellerId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ChatMessage>(entity =>
+        {
+            entity.ToTable("ChatMessages");
+            entity.HasKey(message => message.Id);
+            entity.Property(message => message.SenderId).HasMaxLength(450).IsRequired();
+            entity.Property(message => message.Body).HasMaxLength(2_000).IsRequired();
+            entity.HasIndex(message => new { message.ConversationId, message.CreatedAtUtc });
+            entity.HasOne(message => message.Conversation).WithMany(conversation => conversation.Messages)
+                .HasForeignKey(message => message.ConversationId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(message => message.Sender).WithMany().HasForeignKey(message => message.SenderId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ListingSale>(entity =>
+        {
+            entity.ToTable("ListingSales");
+            entity.HasKey(sale => sale.Id);
+            entity.Property(sale => sale.BuyerId).HasMaxLength(450).IsRequired();
+            entity.Property(sale => sale.SellerId).HasMaxLength(450).IsRequired();
+            entity.HasIndex(sale => sale.ListingId).IsUnique();
+            entity.HasIndex(sale => sale.ListingInterestId).IsUnique();
+            entity.HasOne(sale => sale.Listing).WithOne(listing => listing.Sale)
+                .HasForeignKey<ListingSale>(sale => sale.ListingId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(sale => sale.ListingInterest).WithOne(interest => interest.Sale)
+                .HasForeignKey<ListingSale>(sale => sale.ListingInterestId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne(sale => sale.Buyer).WithMany().HasForeignKey(sale => sale.BuyerId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne(sale => sale.Seller).WithMany().HasForeignKey(sale => sale.SellerId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<UserReview>(entity =>
+        {
+            entity.ToTable("UserReviews");
+            entity.HasKey(review => review.Id);
+            entity.Property(review => review.ReviewerId).HasMaxLength(450).IsRequired();
+            entity.Property(review => review.RevieweeId).HasMaxLength(450).IsRequired();
+            entity.Property(review => review.Comment).HasMaxLength(1_000);
+            entity.HasIndex(review => new { review.ListingSaleId, review.ReviewerId }).IsUnique();
+            entity.HasIndex(review => new { review.RevieweeId, review.CreatedAtUtc });
+            entity.HasOne(review => review.ListingSale).WithMany(sale => sale.Reviews)
+                .HasForeignKey(review => review.ListingSaleId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(review => review.Reviewer).WithMany().HasForeignKey(review => review.ReviewerId).OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne(review => review.Reviewee).WithMany().HasForeignKey(review => review.RevieweeId).OnDelete(DeleteBehavior.NoAction);
         });
     }
 }

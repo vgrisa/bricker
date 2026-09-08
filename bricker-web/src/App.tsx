@@ -11,14 +11,24 @@ import {
 } from "react-router-dom";
 import {
   api,
+  apiUrl,
   fileUrl,
   type Category,
   type Detail,
   type Interest,
+  type InterestCreated,
   type Listing,
   type Profile,
   type SentInterest,
 } from "./api";
+import {
+  CompleteProfilePage,
+  ConversationPage,
+  ConversationsPage,
+  PendingReviewsPanel,
+  PublicUserPage,
+} from "./community";
+import { useUnreadCount } from "./useUnreadCount";
 import "./App.css";
 
 const money = (value: number) =>
@@ -45,10 +55,12 @@ const formatPhone = (value: string) => {
 function Layout({
   profile,
   setProfile,
+  unreadCount,
   children,
 }: {
   profile: Profile | null;
   setProfile: (profile: Profile | null) => void;
+  unreadCount: number;
   children: React.ReactNode;
 }) {
   const navigate = useNavigate();
@@ -66,6 +78,11 @@ function Layout({
         <nav>
           <NavLink to="/materiais">Materiais</NavLink>
           <NavLink to="/anunciar">Anunciar</NavLink>
+          {profile && (
+            <NavLink to="/conversas" className="conversation-nav">
+              Conversas{unreadCount > 0 && <span>{unreadCount > 99 ? "99+" : unreadCount}</span>}
+            </NavLink>
+          )}
           {profile && <NavLink to="/perfil">Meu perfil</NavLink>}
         </nav>
         <div>
@@ -200,7 +217,7 @@ function Home() {
         <article>
           <b>03</b>
           <h3>Construa</h3>
-          <p>Combine pelo WhatsApp e reaproveite.</p>
+          <p>Converse pela Bricker, negocie e reaproveite.</p>
         </article>
       </section>
     </main>
@@ -465,10 +482,8 @@ function DetailPage({ profile }: { profile: Profile | null }) {
       return;
     }
     try {
-      await api<void>(`/listings/${id}/interests`, { method: "POST" });
-      setMessage(
-        "Interesse registrado. O anunciante verá seu WhatsApp no painel.",
-      );
+      const result = await api<InterestCreated>(`/listings/${id}/interests`, { method: "POST" });
+      navigate(`/conversas/${result.conversationId}`);
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -576,10 +591,14 @@ function DetailPage({ profile }: { profile: Profile | null }) {
               {detail.seller?.state ?? detail.listing.state}
             </p>
             {detail.seller && (
-              <p>
-                Membro desde{" "}
-                {new Date(detail.seller.createdAtUtc).getFullYear()}
-              </p>
+              <>
+                <p>Membro desde {new Date(detail.seller.createdAtUtc).getFullYear()}</p>
+                <p className="seller-rating">
+                  <strong>{detail.seller.rating?.toFixed(1).replace(".", ",") ?? "Novo"}</strong>
+                  {detail.seller.reviewCount > 0 ? ` ★ · ${detail.seller.reviewCount} avaliação${detail.seller.reviewCount === 1 ? "" : "ões"}` : " · sem avaliações"}
+                </p>
+                {detail.seller.id && <Link to={`/usuarios/${detail.seller.id}`}>Ver perfil público →</Link>}
+              </>
             )}
           </aside>
         </section>
@@ -599,7 +618,17 @@ function Auth({ setProfile }: { setProfile: (p: Profile) => void }) {
     state: "",
     whatsApp: "",
   });
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() => {
+    const reason = new URLSearchParams(window.location.search).get("googleError");
+    const googleErrors: Record<string, string> = {
+      access_denied: "O acesso com o Google foi cancelado.",
+      invalid_callback: "O Google não devolveu uma sessão de login válida. Tente novamente.",
+      email_not_verified: "O Google não confirmou este endereço de e-mail.",
+      create_failed: "Não foi possível criar a conta Bricker com este e-mail.",
+      link_failed: "Este login Google já está vinculado a outra conta.",
+    };
+    return reason ? googleErrors[reason] ?? "Não foi possível concluir o login com o Google." : "";
+  });
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     try {
@@ -622,6 +651,14 @@ function Auth({ setProfile }: { setProfile: (p: Profile) => void }) {
     <main className="auth page">
       <p className="eyebrow">SUA CONTA</p>
       <h1>{register ? "Crie sua conta" : "Entre na Bricker"}</h1>
+      <button
+        className="google-button"
+        type="button"
+        onClick={() => window.location.assign(`${apiUrl}/auth/google?returnUrl=${encodeURIComponent("/")}`)}
+      >
+        <span aria-hidden="true">G</span> Continuar com o Google
+      </button>
+      <div className="auth-divider"><span>ou use seu e-mail</span></div>
       <form onSubmit={submit}>
         {register && (
           <label>
@@ -658,9 +695,8 @@ function Auth({ setProfile }: { setProfile: (p: Profile) => void }) {
         {register && (
           <>
             <label>
-              WhatsApp
+              WhatsApp <small>(opcional e privado)</small>
               <input
-                required
                 inputMode="tel"
                 maxLength={15}
                 placeholder="(47) 99999-9999"
@@ -1071,6 +1107,9 @@ function ProfilePage({
   const [editing, setEditing] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [form, setForm] = useState(profile);
+  const [saleListing, setSaleListing] = useState<Listing | null>(null);
+  const [saleInterestId, setSaleInterestId] = useState("");
+  const [saleError, setSaleError] = useState("");
   useEffect(() => {
     if (profile) {
       void api<Listing[]>("/listings/mine").then(setMine);
@@ -1114,6 +1153,32 @@ function ProfilePage({
       ),
     );
   };
+  const chooseStatus = (item: Listing, status: number) => {
+    if (status === 3) {
+      setSaleListing(item);
+      setSaleInterestId("");
+      setSaleError("");
+      return;
+    }
+    void updateStatus(item.id, status).catch((reason) =>
+      setProfileError(reason instanceof Error ? reason.message : "Não foi possível atualizar o anúncio."),
+    );
+  };
+  const completeSale = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!saleListing || !saleInterestId) return;
+    setSaleError("");
+    try {
+      await api(`/listings/${saleListing.id}/complete-sale`, {
+        method: "POST",
+        body: JSON.stringify({ interestId: saleInterestId }),
+      });
+      setMine((current) => current.map((item) => item.id === saleListing.id ? { ...item, status: 3, hasConfirmedSale: true } : item));
+      setSaleListing(null);
+    } catch (reason) {
+      setSaleError(reason instanceof Error ? reason.message : "Não foi possível concluir a venda.");
+    }
+  };
   const removeFavorite = async (item: Listing) => {
     await api<void>(`/favorites/${item.id}`, { method: "DELETE" });
     setFavorites((current) => current.filter((favorite) => favorite.id !== item.id));
@@ -1154,8 +1219,7 @@ function ProfilePage({
               <h2>Atualize seu perfil</h2>
             </div>
             <p>
-              Seu WhatsApp só aparece para anunciantes quando você demonstra
-              interesse.
+              Seu WhatsApp é opcional, privado e não é compartilhado nas conversas.
             </p>
           </div>
           <label>
@@ -1228,8 +1292,9 @@ function ProfilePage({
                     Status
                     <select
                       value={item.status}
+                      disabled={item.status === 3}
                       onChange={(event) =>
-                        void updateStatus(item.id, Number(event.target.value))
+                        chooseStatus(item, Number(event.target.value))
                       }
                     >
                       <option value="1">Disponível</option>
@@ -1246,6 +1311,11 @@ function ProfilePage({
                       Editar material
                     </Link>
                   )}
+                  {item.status === 3 && !item.hasConfirmedSale && (
+                    <button className="edit-listing-button" type="button" onClick={() => { setSaleListing(item); setSaleInterestId(""); setSaleError(""); }}>
+                      Vincular comprador
+                    </button>
+                  )}
                 </div>
               </div>
             ))
@@ -1254,6 +1324,7 @@ function ProfilePage({
           )}
         </div>
       </section>
+      <PendingReviewsPanel />
       <section className="profile-section">
         <div className="profile-section-heading">
           <span className="section-kicker">SALVOS</span>
@@ -1276,32 +1347,21 @@ function ProfilePage({
       </section>
       <section className="profile-section">
         <div className="profile-section-heading">
-          <span className="section-kicker">CONTATOS</span>
+          <span className="section-kicker">NEGOCIAÇÕES</span>
           <h2>Interesses recebidos</h2>
         </div>
         {interests.length ? (
           <div className="interest-list">
             {interests.map((item) => (
               <article key={item.id}>
-                <strong>{item.listingTitle}</strong>
-                <span>
-                  {item.displayName} · {item.email}
-                </span>
-                {item.whatsApp && (
-                  <a
-                    href={`https://wa.me/${item.whatsApp.replace(/\D/g, "")}`}
-                    target="_blank"
-                  >
-                    Conversar no WhatsApp
-                  </a>
-                )}
+                <div><strong>{item.listingTitle}</strong><span>Interesse de {item.displayName}</span></div>
+                {item.conversationId && <Link to={`/conversas/${item.conversationId}`}>Abrir conversa →</Link>}
               </article>
             ))}
           </div>
         ) : (
           <p className="empty">
-            Quando alguém se interessar pelos seus materiais, o contato
-            aparecerá aqui.
+            Quando alguém se interessar pelos seus materiais, a conversa aparecerá aqui.
           </p>
         )}
       </section>
@@ -1324,6 +1384,7 @@ function ProfilePage({
                 {item.listingStatus === 1 && (
                   <Link to={`/materiais/${item.listingId}`}>Ver material</Link>
                 )}
+                {item.conversationId && <Link to={`/conversas/${item.conversationId}`}>Abrir conversa →</Link>}
               </article>
             ))}
           </div>
@@ -1331,20 +1392,44 @@ function ProfilePage({
           <p className="empty">Seus interesses enviados aparecerão aqui.</p>
         )}
       </section>
+      {saleListing && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setSaleListing(null)}>
+          <form className="sale-modal" role="dialog" aria-modal="true" aria-labelledby="sale-title" onSubmit={completeSale} onMouseDown={(event) => event.stopPropagation()}>
+            <button className="modal-close" type="button" aria-label="Fechar" onClick={() => setSaleListing(null)}>×</button>
+            <p className="eyebrow">CONCLUIR NEGOCIAÇÃO</p>
+            <h2 id="sale-title">Quem comprou este material?</h2>
+            <p>Ao confirmar, o anúncio será marcado como vendido e vocês poderão se avaliar.</p>
+            {interests.filter((item) => item.listingId === saleListing.id).length ? (
+              <label>Comprador<select required value={saleInterestId} onChange={(event) => setSaleInterestId(event.target.value)}><option value="">Selecione uma pessoa</option>{interests.filter((item) => item.listingId === saleListing.id).map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label>
+            ) : <p className="empty">Este anúncio ainda não possui interessados. Para uma avaliação verificada, o comprador precisa iniciar uma conversa pelo anúncio.</p>}
+            {saleError && <p className="form-error">{saleError}</p>}
+            <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setSaleListing(null)}>Cancelar</button><button className="primary-button" disabled={!saleInterestId}>Confirmar venda</button></div>
+          </form>
+        </div>
+      )}
     </main>
   );
 }
 
 function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   useEffect(() => {
     void api<Profile>("/profile")
       .then(setProfile)
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setProfileLoaded(true));
   }, []);
+  const unreadCount = useUnreadCount(profile);
+  if (!profileLoaded) return <main className="page">Carregando Bricker...</main>;
   return (
-    <Layout profile={profile} setProfile={setProfile}>
+    <Layout profile={profile} setProfile={setProfile} unreadCount={unreadCount}>
       <Routes>
+        <Route path="/completar-perfil" element={<CompleteProfilePage profile={profile} setProfile={setProfile} />} />
+        {profile?.requiresProfileCompletion ? (
+          <Route path="*" element={<Navigate to="/completar-perfil" replace />} />
+        ) : (
+          <>
         <Route path="/" element={<Home />} />
         <Route path="/materiais" element={<Catalog profile={profile} />} />
         <Route
@@ -1358,7 +1443,12 @@ function App() {
           element={<ProfilePage profile={profile} setProfile={setProfile} />}
         />
         <Route path="/entrar" element={<Auth setProfile={setProfile} />} />
+        <Route path="/conversas" element={<ConversationsPage profile={profile} />} />
+        <Route path="/conversas/:id" element={<ConversationPage profile={profile} />} />
+        <Route path="/usuarios/:id" element={<PublicUserPage />} />
         <Route path="*" element={<Navigate to="/" />} />
+          </>
+        )}
       </Routes>
     </Layout>
   );

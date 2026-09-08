@@ -1,5 +1,6 @@
 export const apiUrl =
   import.meta.env.VITE_API_URL ?? "http://localhost:5190/api/v1";
+export const hubUrl = `${apiUrl.replace(/\/api\/v1\/?$/, "")}/hubs/chat`;
 export const fileUrl = (path?: string | null) =>
   path ? `http://localhost:5190${path}` : undefined;
 
@@ -26,6 +27,7 @@ export type Listing = {
   imageUrl?: string;
   imageUrls: string[];
   createdAtUtc: string;
+  hasConfirmedSale: boolean;
 };
 export type Profile = {
   id: string;
@@ -34,6 +36,7 @@ export type Profile = {
   city?: string;
   state?: string;
   whatsApp?: string;
+  requiresProfileCompletion: boolean;
   createdAtUtc: string;
 };
 export type ListingImage = { id: string; url: string; sortOrder: number };
@@ -41,22 +44,31 @@ export type Detail = {
   listing: Listing;
   images: ListingImage[];
   seller?: {
+    id?: string;
     displayName: string;
     city?: string;
     state?: string;
+    rating?: number;
+    reviewCount: number;
     createdAtUtc: string;
   };
 };
 export type Interest = {
   id: string;
   listingId: string;
+  conversationId?: string;
+  userId: string;
   listingTitle: string;
   displayName: string;
-  email: string;
-  whatsApp?: string;
   createdAtUtc: string;
 };
-export type SentInterest = { id: string; listingId: string; listingTitle: string; listingStatus: number; sellerDisplayName: string; imageUrl?: string; createdAtUtc: string };
+export type SentInterest = { id: string; listingId: string; conversationId?: string; listingTitle: string; listingStatus: number; sellerDisplayName: string; imageUrl?: string; createdAtUtc: string };
+export type InterestCreated = { interestId: string; conversationId: string };
+export type ConversationSummary = { id: string; listingId: string; listingTitle: string; listingImageUrl?: string; listingStatus: number; otherUserId: string; otherUserDisplayName: string; lastMessage?: string; lastMessageAtUtc?: string; unreadCount: number };
+export type ChatMessage = { id: string; conversationId: string; senderId: string; senderDisplayName: string; body: string; createdAtUtc: string; readAtUtc?: string };
+export type PendingReview = { saleId: string; listingId: string; listingTitle: string; revieweeId: string; revieweeDisplayName: string; revieweeRole: string; confirmedAtUtc: string };
+export type UserReview = { id: string; saleId: string; reviewerId: string; reviewerDisplayName: string; revieweeRole: string; listingTitle: string; rating: number; comment?: string; createdAtUtc: string; updatedAtUtc?: string; canEdit: boolean };
+export type PublicUserProfile = { id: string; displayName: string; city?: string; state?: string; createdAtUtc: string; rating?: number; reviewCount: number; reviews: UserReview[]; page: number; pageSize: number; totalCount: number };
 
 export async function api<T>(path: string, options: RequestInit = {}) {
   const response = await fetch(`${apiUrl}${path}`, {
