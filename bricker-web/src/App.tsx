@@ -72,8 +72,8 @@ function Layout({
   return (
     <>
       <header className="site-header">
-        <Link className="brand" to="/">
-          bricker<span>.</span>
+        <Link className="brand" to="/" aria-label="Bricker — página inicial">
+          <img src="/brand/logo-primary.png" alt="Bricker" />
         </Link>
         <nav>
           <NavLink to="/materiais">Materiais</NavLink>

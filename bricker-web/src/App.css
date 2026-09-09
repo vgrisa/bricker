@@ -27,13 +27,14 @@ footer {
   gap: 24px;
 }
 .brand {
-  font-size: 30px;
-  font-weight: 800;
-  letter-spacing: -2px;
-  color: var(--green);
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
 }
-.brand span {
-  color: var(--terracotta);
+.brand img {
+  display: block;
+  width: auto;
+  height: 42px;
 }
 nav {
   display: flex;
@@ -1371,6 +1372,9 @@ footer {
     height: auto;
     padding: 20px 0;
     flex-wrap: wrap;
+  }
+  .brand img {
+    height: 37px;
   }
   .site-header nav {
     order: 3;

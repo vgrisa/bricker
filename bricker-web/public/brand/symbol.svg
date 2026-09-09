@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Símbolo da Bricker</title>
+  <path fill="#24523e" d="M117 62c-15 8-24 23-24 40v190l42-25v-40l98-57 65 38c15 9 34 9 49 0l72-42v-49c0-17-9-32-24-41L277 58c-15-9-34-9-49 0l-93 54V72c0-9-10-15-18-10Z"/>
+  <path fill="#183c2d" d="M93 303v52c0 17 9 32 24 41l115 66c15 9 34 9 49 0l114-66c15-9 24-24 24-41V222l-42 24v40l-97 57-66-38c-15-9-34-9-49 0l-72 42v-44Z"/>
+</svg>
