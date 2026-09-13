@@ -101,7 +101,18 @@ function Layout({
         </div>
       </header>
       {children}
-      <footer>bricker. Construção circular, de ponta a ponta.</footer>
+      <footer className="site-footer">
+        <div>
+          <strong>bricker.</strong>
+          <p>Materiais de construção ganhando novos destinos, perto de você.</p>
+        </div>
+        <nav aria-label="Navegação do rodapé">
+          <Link to="/materiais">Explorar materiais</Link>
+          <Link to="/anunciar">Anunciar material</Link>
+          {profile && <Link to="/interesses">Interesses</Link>}
+        </nav>
+        <small>Negociação, pagamento e retirada são combinados diretamente entre os usuários.</small>
+      </footer>
     </>
   );
 }
@@ -164,9 +175,11 @@ function Card({ item, favorite, onFavorite }: { item: Listing; favorite?: boolea
 }
 
 function Home() {
+  const navigate = useNavigate();
   const [recent, setRecent] = useState<Listing[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
   useEffect(() => {
     void Promise.all([
       api<{ items: Listing[]; totalCount: number }>("/listings?pageSize=3"),
@@ -177,16 +190,28 @@ function Home() {
       setCategories(categoryList);
     });
   }, []);
+  const submitSearch = (event: FormEvent) => {
+    event.preventDefault();
+    const term = search.trim();
+    navigate(term ? `/materiais?search=${encodeURIComponent(term)}` : "/materiais");
+  };
   return (
     <main>
       <section className="hero-new">
-        <p className="eyebrow">MATERIAIS QUE GANHAM NOVO DESTINO</p>
-        <h1>Uma obra mais econômica começa com uma escolha inteligente.</h1>
-        <p>
-          Compre e anuncie excedentes de construção com segurança, perto de
-          você.
-        </p>
-        <div>
+        <div className="hero-copy">
+          <p className="eyebrow">MATERIAIS QUE GANHAM NOVO DESTINO</p>
+          <h1>O que sobra em uma obra pode construir outra.</h1>
+          <p>
+            Encontre e anuncie materiais de construção excedentes. Economize,
+            reduza o desperdício e negocie com pessoas da sua região.
+          </p>
+          <form className="home-search" onSubmit={submitSearch}>
+            <input aria-label="Buscar materiais" maxLength={160} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Busque por material, descrição ou vendedor" />
+            <button className="primary-button">Buscar materiais</button>
+          </form>
+          {categories.length > 0 && <div className="popular-searches"><span>Populares:</span>{categories.slice(0, 4).map((category) => <Link key={category.id} to={`/materiais?category=${category.slug}`}>{category.name}</Link>)}</div>}
+        </div>
+        <div className="hero-actions">
           <Link className="primary-button" to="/materiais">
             Encontrar materiais
           </Link>
@@ -196,24 +221,37 @@ function Home() {
         </div>
       </section>
       <section className="home-stats"><div><strong>{total}</strong><span>materiais disponíveis</span></div><div><strong>{categories.length}</strong><span>categorias para explorar</span></div><div><strong>5</strong><span>fotos por anúncio</span></div></section>
+      <section className="home-benefits home-section">
+        <div className="home-section-heading"><p className="eyebrow">POR QUE USAR A BRICKER</p><h2>Bom para a obra, para o bolso e para a cidade.</h2><p>A Bricker aproxima quem tem material parado de quem precisa continuar construindo.</p></div>
+        <div className="benefit-grid">
+          <article><b>01</b><h3>Economize na obra</h3><p>Encontre excedentes em bom estado e negocie diretamente com o vendedor.</p></article>
+          <article><b>02</b><h3>Evite desperdício</h3><p>Dê uma nova utilidade a materiais que ainda podem ser aproveitados.</p></article>
+          <article><b>03</b><h3>Negocie por perto</h3><p>Use cidade, bairro, UF e CEP para encontrar oportunidades na sua região.</p></article>
+          <article><b>04</b><h3>Conheça a outra pessoa</h3><p>Consulte o perfil, converse pela plataforma e veja avaliações verificadas.</p></article>
+        </div>
+      </section>
       <section className="home-content"><div className="section-title"><div><p className="eyebrow">RECÉM-PUBLICADOS</p><h2>Materiais que acabaram de chegar</h2></div><Link className="secondary-button" to="/materiais">Ver todos</Link></div><div className="card-grid">{recent.map((item) => <Card key={item.id} item={item} />)}</div></section>
+      <section className="home-how home-section">
+        <div className="home-section-heading"><p className="eyebrow">SIMPLES DE PONTA A PONTA</p><h2>Como funciona</h2><p>Comprar e anunciar possuem caminhos claros, com a negociação registrada na Bricker.</p></div>
+        <div className="how-grid">
+          <article>
+            <div><span>PARA QUEM COMPRA</span><h3>Encontre o que a sua obra precisa</h3></div>
+            <ol><li><b>1</b><span><strong>Explore</strong>Busque e filtre materiais pela localização.</span></li><li><b>2</b><span><strong>Demonstre interesse</strong>Abra uma negociação pelo anúncio.</span></li><li><b>3</b><span><strong>Converse</strong>Combine preço, pagamento e retirada pelo chat.</span></li><li><b>4</b><span><strong>Avalie</strong>Depois da venda, conte como foi a experiência.</span></li></ol>
+          </article>
+          <article>
+            <div><span>PARA QUEM ANUNCIA</span><h3>Transforme excedentes em oportunidade</h3></div>
+            <ol><li><b>1</b><span><strong>Publique</strong>Cadastre informações e até cinco fotos.</span></li><li><b>2</b><span><strong>Receba interessados</strong>Acompanhe as negociações em um só lugar.</span></li><li><b>3</b><span><strong>Negocie</strong>Converse diretamente com cada interessado.</span></li><li><b>4</b><span><strong>Conclua</strong>Escolha o comprador e confirme a venda.</span></li></ol>
+          </article>
+        </div>
+      </section>
       <section className="home-categories"><p className="eyebrow">EXPLORE POR CATEGORIA</p><div>{categories.map((category) => <Link key={category.id} to={`/materiais?category=${category.slug}`}>{category.name}<span>→</span></Link>)}</div></section>
-      <section className="feature-row">
-        <article>
-          <b>01</b>
-          <h3>Encontre</h3>
-          <p>Filtre por material, localização e preço.</p>
-        </article>
-        <article>
-          <b>02</b>
-          <h3>Conheça</h3>
-          <p>Veja fotos, detalhes e o perfil do vendedor.</p>
-        </article>
-        <article>
-          <b>03</b>
-          <h3>Construa</h3>
-          <p>Converse pela Bricker, negocie e reaproveite.</p>
-        </article>
+      <section className="home-trust home-section">
+        <div><p className="eyebrow">CONFIANÇA NA NEGOCIAÇÃO</p><h2>Informação para decidir com tranquilidade.</h2><p>A Bricker mantém a conversa e o histórico do interesse dentro da plataforma. Seus dados privados não são exibidos publicamente.</p><Link className="secondary-button" to="/materiais">Conhecer os materiais</Link></div>
+        <div className="trust-list"><article><strong>Chat interno</strong><span>Converse sem precisar divulgar seu telefone ou e-mail.</span></article><article><strong>Perfis públicos</strong><span>Consulte localização, tempo de cadastro e reputação.</span></article><article><strong>Avaliações verificadas</strong><span>Somente participantes de uma venda confirmada podem se avaliar.</span></article><article><strong>Histórico preservado</strong><span>A negociação continua acessível mesmo após o anúncio ser encerrado.</span></article></div>
+      </section>
+      <section className="home-final-cta">
+        <div><p className="eyebrow">CONSTRUÇÃO CIRCULAR COMEÇA AQUI</p><h2>Tem material parado na sua obra?</h2><p>Publique o excedente e encontre alguém que possa dar um novo destino a ele.</p></div>
+        <div><Link className="primary-button" to="/anunciar">Anunciar material</Link><Link className="secondary-button" to="/materiais">Explorar materiais</Link></div>
       </section>
     </main>
   );
