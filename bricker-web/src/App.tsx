@@ -19,12 +19,11 @@ import {
   type InterestCreated,
   type Listing,
   type Profile,
-  type SentInterest,
 } from "./api";
 import {
   CompleteProfilePage,
   ConversationPage,
-  ConversationsPage,
+  InterestsPage,
   PendingReviewsPanel,
   PublicUserPage,
 } from "./community";
@@ -35,9 +34,6 @@ const money = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const condition = (value: number) =>
   ["Ótimo estado", "Bom estado", "Estado regular"][value] ?? "Não informado";
-const listingStatus = (value: number) =>
-  ["Rascunho", "Disponível", "Reservado", "Vendido", "Inativo"][value] ??
-  "Não informado";
 const onlyDigits = (value: string) => value.replace(/\D/g, "");
 const formatPostalCode = (value: string) => {
   const digits = onlyDigits(value).slice(0, 8);
@@ -79,8 +75,8 @@ function Layout({
           <NavLink to="/materiais">Materiais</NavLink>
           <NavLink to="/anunciar">Anunciar</NavLink>
           {profile && (
-            <NavLink to="/conversas" className="conversation-nav">
-              Conversas{unreadCount > 0 && <span>{unreadCount > 99 ? "99+" : unreadCount}</span>}
+            <NavLink to="/interesses" className="conversation-nav">
+              Interesses{unreadCount > 0 && <span>{unreadCount > 99 ? "99+" : unreadCount}</span>}
             </NavLink>
           )}
           {profile && <NavLink to="/perfil">Meu perfil</NavLink>}
@@ -483,7 +479,7 @@ function DetailPage({ profile }: { profile: Profile | null }) {
     }
     try {
       const result = await api<InterestCreated>(`/listings/${id}/interests`, { method: "POST" });
-      navigate(`/conversas/${result.conversationId}`);
+      navigate(`/interesses/${result.conversationId}`);
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -1103,7 +1099,6 @@ function ProfilePage({
   const [mine, setMine] = useState<Listing[]>([]);
   const [interests, setInterests] = useState<Interest[]>([]);
   const [favorites, setFavorites] = useState<Listing[]>([]);
-  const [sentInterests, setSentInterests] = useState<SentInterest[]>([]);
   const [editing, setEditing] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [form, setForm] = useState(profile);
@@ -1115,9 +1110,6 @@ function ProfilePage({
       void api<Listing[]>("/listings/mine").then(setMine);
       void api<Interest[]>("/listings/mine/interests").then(setInterests);
       void api<Listing[]>("/favorites").then(setFavorites);
-      void api<SentInterest[]>("/listings/interests/sent").then(
-        setSentInterests,
-      );
     }
   }, [profile]);
   if (!profile || !form) return <Navigate to="/entrar" />;
@@ -1345,53 +1337,6 @@ function ProfilePage({
           <p className="empty">Os materiais que você favoritar aparecerão aqui.</p>
         )}
       </section>
-      <section className="profile-section">
-        <div className="profile-section-heading">
-          <span className="section-kicker">NEGOCIAÇÕES</span>
-          <h2>Interesses recebidos</h2>
-        </div>
-        {interests.length ? (
-          <div className="interest-list">
-            {interests.map((item) => (
-              <article key={item.id}>
-                <div><strong>{item.listingTitle}</strong><span>Interesse de {item.displayName}</span></div>
-                {item.conversationId && <Link to={`/conversas/${item.conversationId}`}>Abrir conversa →</Link>}
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="empty">
-            Quando alguém se interessar pelos seus materiais, a conversa aparecerá aqui.
-          </p>
-        )}
-      </section>
-      <section className="profile-section">
-        <div className="profile-section-heading">
-          <span className="section-kicker">ACOMPANHAMENTO</span>
-          <h2>Interesses enviados</h2>
-        </div>
-        {sentInterests.length ? (
-          <div className="interest-list">
-            {sentInterests.map((item) => (
-              <article key={item.id}>
-                <div>
-                  <strong>{item.listingTitle}</strong>
-                  <span>Anunciado por {item.sellerDisplayName}</span>
-                </div>
-                <span className={`status-badge status-${item.listingStatus}`}>
-                  {listingStatus(item.listingStatus)}
-                </span>
-                {item.listingStatus === 1 && (
-                  <Link to={`/materiais/${item.listingId}`}>Ver material</Link>
-                )}
-                {item.conversationId && <Link to={`/conversas/${item.conversationId}`}>Abrir conversa →</Link>}
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="empty">Seus interesses enviados aparecerão aqui.</p>
-        )}
-      </section>
       {saleListing && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setSaleListing(null)}>
           <form className="sale-modal" role="dialog" aria-modal="true" aria-labelledby="sale-title" onSubmit={completeSale} onMouseDown={(event) => event.stopPropagation()}>
@@ -1409,6 +1354,11 @@ function ProfilePage({
       )}
     </main>
   );
+}
+
+function LegacyConversationRedirect() {
+  const { id } = useParams();
+  return <Navigate to={id ? `/interesses/${id}` : "/interesses"} replace />;
 }
 
 function App() {
@@ -1443,8 +1393,10 @@ function App() {
           element={<ProfilePage profile={profile} setProfile={setProfile} />}
         />
         <Route path="/entrar" element={<Auth setProfile={setProfile} />} />
-        <Route path="/conversas" element={<ConversationsPage profile={profile} />} />
-        <Route path="/conversas/:id" element={<ConversationPage profile={profile} />} />
+        <Route path="/interesses" element={<InterestsPage profile={profile} />} />
+        <Route path="/interesses/:id" element={<ConversationPage profile={profile} />} />
+        <Route path="/conversas" element={<LegacyConversationRedirect />} />
+        <Route path="/conversas/:id" element={<LegacyConversationRedirect />} />
         <Route path="/usuarios/:id" element={<PublicUserPage />} />
         <Route path="*" element={<Navigate to="/" />} />
           </>

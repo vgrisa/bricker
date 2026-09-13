@@ -16,14 +16,30 @@ public sealed record ConversationSummaryResponse(
     DateTime? LastMessageAtUtc,
     int UnreadCount);
 
+public sealed record InterestConversationResponse(
+    Guid InterestId,
+    Guid ConversationId,
+    string Direction,
+    DateTime InterestCreatedAtUtc,
+    Guid ListingId,
+    string ListingTitle,
+    string? ListingImageUrl,
+    ListingStatus ListingStatus,
+    string OtherUserId,
+    string OtherUserDisplayName,
+    string? LastMessage,
+    DateTime? LastMessageAtUtc,
+    int UnreadCount);
+
 public sealed record ChatMessageResponse(
     Guid Id,
     Guid ConversationId,
-    string SenderId,
-    string SenderDisplayName,
+    string? SenderId,
+    string? SenderDisplayName,
     string Body,
     DateTime CreatedAtUtc,
-    DateTime? ReadAtUtc);
+    DateTime? ReadAtUtc,
+    ChatMessageType Type);
 
 public sealed record SendMessageRequest(string Body);
 public sealed record CompleteSaleRequest(Guid InterestId);

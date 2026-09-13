@@ -6,12 +6,14 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Bricker.Api.Validation;
+using Bricker.Api.Hubs;
+using Microsoft.AspNetCore.SignalR;
 
 namespace Bricker.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/listings")]
-public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser> userManager, IWebHostEnvironment environment) : ControllerBase
+public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser> userManager, IWebHostEnvironment environment, IHubContext<ChatHub> hub) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResponse<ListingResponse>>> Search(
@@ -226,9 +228,7 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         var listing = await db.Listings.SingleOrDefaultAsync(item => item.Id == id && item.SellerId == userId, cancellationToken);
         if (listing is null) return NotFound();
 
-        listing.Status = ListingStatus.Inactive;
-        listing.UpdatedAtUtc = DateTime.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
+        await SetListingStatus(listing, ListingStatus.Inactive, cancellationToken);
         return NoContent();
     }
 
@@ -244,9 +244,7 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         var listing = await db.Listings.Include(item => item.Sale).SingleOrDefaultAsync(item => item.Id == id && item.SellerId == userId, cancellationToken);
         if (listing is null) return NotFound();
         if (listing.Sale is not null) return Conflict(new { message = "Uma venda confirmada não pode ter o status alterado." });
-        listing.Status = request.Status;
-        listing.UpdatedAtUtc = DateTime.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
+        await SetListingStatus(listing, request.Status, cancellationToken);
         return NoContent();
     }
 
@@ -273,10 +271,8 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
             BuyerId = interest.InterestedUserId,
             SellerId = userId
         };
-        listing.Status = ListingStatus.Sold;
-        listing.UpdatedAtUtc = DateTime.UtcNow;
         db.ListingSales.Add(sale);
-        await db.SaveChangesAsync(cancellationToken);
+        await SetListingStatus(listing, ListingStatus.Sold, cancellationToken);
         return Ok(new SaleResponse(sale.Id, id, listing.Title, sale.BuyerId, interest.InterestedUser.DisplayName,
             sale.SellerId, seller.DisplayName, sale.ConfirmedAtUtc));
     }
@@ -380,5 +376,55 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         var relativePath = imageUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
         var fullPath = Path.Combine(environment.ContentRootPath, relativePath);
         if (System.IO.File.Exists(fullPath)) System.IO.File.Delete(fullPath);
+    }
+
+    private async Task SetListingStatus(Listing listing, ListingStatus status, CancellationToken cancellationToken)
+    {
+        if (listing.Status == status)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        listing.Status = status;
+        listing.UpdatedAtUtc = DateTime.UtcNow;
+        var body = status switch
+        {
+            ListingStatus.Active => "Este material voltou a ficar disponível.",
+            ListingStatus.Reserved => "Este material foi reservado.",
+            ListingStatus.Sold => "Este material foi vendido.",
+            ListingStatus.Inactive => "Este material foi inativado.",
+            _ => null
+        };
+        var notifications = new List<(Conversation Conversation, ChatMessage Message)>();
+        if (body is not null)
+        {
+            var conversations = await db.Conversations
+                .Where(conversation => conversation.ListingId == listing.Id)
+                .ToListAsync(cancellationToken);
+            foreach (var conversation in conversations)
+            {
+                var message = new ChatMessage
+                {
+                    ConversationId = conversation.Id,
+                    Body = body,
+                    Type = ChatMessageType.System
+                };
+                conversation.LastMessageAtUtc = message.CreatedAtUtc;
+                db.ChatMessages.Add(message);
+                notifications.Add((conversation, message));
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        foreach (var (conversation, message) in notifications)
+        {
+            var response = new ChatMessageResponse(message.Id, conversation.Id, null, null, message.Body,
+                message.CreatedAtUtc, null, message.Type);
+            await hub.Clients.Group(ChatHub.GroupName(conversation.Id))
+                .SendAsync("MessageReceived", response, cancellationToken);
+            await hub.Clients.Groups(ChatHub.UserGroup(conversation.BuyerId), ChatHub.UserGroup(conversation.SellerId))
+                .SendAsync("ConversationUpdated", conversation.Id, cancellationToken);
+        }
     }
 }

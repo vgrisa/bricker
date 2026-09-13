@@ -72,3 +72,40 @@ public sealed class InterestsController(BrickerDbContext db, UserManager<AppUser
         return Ok(interests);
     }
 }
+
+[ApiController]
+[Authorize]
+[Route("api/v1/interests")]
+public sealed class InterestCenterController(BrickerDbContext db, UserManager<AppUser> userManager) : ControllerBase
+{
+    [HttpGet]
+    public async Task<ActionResult<IReadOnlyCollection<InterestConversationResponse>>> List(CancellationToken cancellationToken)
+    {
+        var userId = userManager.GetUserId(User)!;
+        var rows = await db.Conversations.AsNoTracking()
+            .Where(conversation => conversation.BuyerId == userId || conversation.SellerId == userId)
+            .Select(conversation => new
+            {
+                InterestId = conversation.ListingInterestId,
+                ConversationId = conversation.Id,
+                Direction = conversation.BuyerId == userId ? "sent" : "received",
+                InterestCreatedAtUtc = conversation.ListingInterest.CreatedAtUtc,
+                conversation.ListingId,
+                ListingTitle = conversation.Listing.Title,
+                ListingImageUrl = conversation.Listing.ImageUrl,
+                ListingStatus = conversation.Listing.Status,
+                OtherUserId = conversation.BuyerId == userId ? conversation.SellerId : conversation.BuyerId,
+                OtherUserDisplayName = conversation.BuyerId == userId ? conversation.Seller.DisplayName : conversation.Buyer.DisplayName,
+                LastMessage = conversation.Messages.OrderByDescending(message => message.CreatedAtUtc).Select(message => message.Body).FirstOrDefault(),
+                conversation.LastMessageAtUtc,
+                UnreadCount = conversation.Messages.Count(message => message.Type == ChatMessageType.User && message.SenderId != userId && message.ReadAtUtc == null)
+            })
+            .OrderByDescending(item => item.LastMessageAtUtc ?? item.InterestCreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        return Ok(rows.Select(row => new InterestConversationResponse(
+            row.InterestId, row.ConversationId, row.Direction, row.InterestCreatedAtUtc,
+            row.ListingId, row.ListingTitle, row.ListingImageUrl, row.ListingStatus,
+            row.OtherUserId, row.OtherUserDisplayName, row.LastMessage, row.LastMessageAtUtc, row.UnreadCount)));
+    }
+}

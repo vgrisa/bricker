@@ -1062,13 +1062,54 @@ textarea {
   color: var(--green);
   font-weight: 750;
 }
-.conversation-list {
+.interest-tabs {
+  display: inline-flex;
+  gap: 6px;
+  margin: 22px 0;
+  padding: 5px;
+  border: 1px solid #dce5db;
+  border-radius: 12px;
+  background: #edf2eb;
+}
+.interest-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #52665a;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.interest-tabs button.active {
+  background: white;
+  color: var(--deep);
+  box-shadow: 0 2px 8px rgb(24 60 45 / 8%);
+}
+.interest-tabs button span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #dbe6da;
+  font-size: 11px;
+}
+.interest-tabs button.active span {
+  background: var(--green);
+  color: white;
+}
+.interest-center-list {
   overflow: hidden;
   border: 1px solid #dce5db;
   border-radius: 14px;
   background: white;
 }
-.conversation-row {
+.interest-center-row {
   display: grid;
   grid-template-columns: 72px 1fr auto;
   align-items: center;
@@ -1077,11 +1118,34 @@ textarea {
   padding: 16px;
   color: inherit;
 }
-.conversation-row + .conversation-row {
+.interest-center-row + .interest-center-row {
   border-top: 1px solid #e5ece3;
 }
-.conversation-row:hover {
+.interest-center-row:hover {
   background: #f6f9f5;
+}
+.interest-row-meta {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex-direction: column;
+  gap: 7px;
+}
+.interest-row-meta > strong {
+  color: var(--green);
+  font-size: 11px;
+}
+.direction-badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f3ece6;
+  color: #87553f;
+  font-size: 10px;
+  font-weight: 800;
+}
+.direction-badge.received {
+  background: var(--sage);
+  color: var(--green);
 }
 .conversation-image {
   display: grid;
@@ -1136,11 +1200,35 @@ textarea {
   border-bottom: 1px solid #dce5db;
   background: #f6f9f5;
 }
-.chat-header span {
+.chat-header > div > span:first-child {
   color: var(--muted);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: .12em;
+}
+.chat-listing-title {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.chat-status-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 26px;
+  border-bottom: 1px solid #eadcae;
+  background: #fff8df;
+  color: #6d5712;
+  font-size: 12px;
+}
+.chat-status-banner.status-3,
+.chat-status-banner.status-4 {
+  border-color: #d7dfd8;
+  background: #eef2ed;
+  color: #52665a !important;
+}
+.chat-status-banner strong {
+  white-space: nowrap;
 }
 .chat-header h1 {
   margin: 5px 0 4px;
@@ -1175,6 +1263,31 @@ textarea {
   border-radius: 14px 4px 14px 14px;
   background: var(--green);
   color: white;
+}
+.system-message {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 90%;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #e8eee7;
+  color: #52665a;
+  font-size: 11px;
+  text-align: center;
+}
+.system-message span {
+  color: var(--green);
+  font-weight: 800;
+}
+.system-message p,
+.system-message small {
+  margin: 0;
+}
+.system-message small {
+  color: var(--muted);
+  font-size: 9px;
 }
 .message p {
   margin: 0;
@@ -1499,8 +1612,16 @@ footer {
   .step-actions .secondary-button {
     width: 100%;
   }
-  .conversation-row {
-    grid-template-columns: 55px 1fr auto;
+  .interest-tabs {
+    display: flex;
+  }
+  .interest-tabs button {
+    justify-content: center;
+    flex: 1;
+    padding-inline: 10px;
+  }
+  .interest-center-row {
+    grid-template-columns: 55px 1fr;
     gap: 11px;
     padding: 13px;
   }
@@ -1511,6 +1632,16 @@ footer {
   .conversation-copy time {
     display: none;
   }
+  .interest-row-meta {
+    grid-column: 2;
+    align-items: center;
+    justify-content: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .interest-row-meta > strong {
+    width: 100%;
+  }
   .chat-header {
     align-items: flex-start;
     padding: 18px;
@@ -1519,6 +1650,12 @@ footer {
     padding: 8px 10px;
     font-size: 11px;
   }
+  .chat-status-banner {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+    padding: 12px 18px;
+  }
   .message-history {
     height: 52vh;
     min-height: 300px;
@@ -1526,6 +1663,11 @@ footer {
   }
   .message {
     max-width: 88%;
+  }
+  .system-message {
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 12px;
   }
   .pending-reviews,
   .public-profile-hero {

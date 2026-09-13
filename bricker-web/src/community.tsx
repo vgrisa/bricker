@@ -6,7 +6,7 @@ import {
   fileUrl,
   hubUrl,
   type ChatMessage,
-  type ConversationSummary,
+  type InterestConversation,
   type PendingReview,
   type Profile,
   type PublicUserProfile,
@@ -85,12 +85,27 @@ export function CompleteProfilePage({
   );
 }
 
-export function ConversationsPage({ profile }: { profile: Profile | null }) {
-  const [items, setItems] = useState<ConversationSummary[]>([]);
+const interestStatus = (value: number) =>
+  ["Rascunho", "Disponível", "Reservado", "Vendido", "Inativo"][value] ?? "Indisponível";
+
+const statusNotice = (value?: number) => {
+  if (value === 2) return "Este material está reservado.";
+  if (value === 3) return "Este material já foi vendido.";
+  if (value === 4) return "Este material está inativo.";
+  return null;
+};
+
+type InterestTab = "sent" | "received";
+
+export function InterestsPage({ profile }: { profile: Profile | null }) {
+  const [items, setItems] = useState<InterestConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<InterestTab>(() =>
+    window.sessionStorage.getItem("bricker:interest-tab") === "received" ? "received" : "sent",
+  );
   const load = useCallback(() => {
     if (!profile) return;
-    void api<ConversationSummary[]>("/conversations")
+    void api<InterestConversation[]>("/interests")
       .then(setItems)
       .finally(() => setLoading(false));
   }, [profile]);
@@ -109,31 +124,48 @@ export function ConversationsPage({ profile }: { profile: Profile | null }) {
     };
   }, [load, profile]);
   if (!profile) return <Navigate to="/entrar" />;
+  const sentCount = items.filter((item) => item.direction === "sent").length;
+  const receivedCount = items.length - sentCount;
+  const visibleItems = items.filter((item) => item.direction === activeTab);
+  const selectTab = (tab: InterestTab) => {
+    setActiveTab(tab);
+    window.sessionStorage.setItem("bricker:interest-tab", tab);
+  };
 
   return (
-    <main className="page conversations-page">
+    <main className="page interests-page">
       <p className="eyebrow">NEGOCIAÇÕES</p>
-      <h1>Conversas</h1>
+      <h1>Interesses</h1>
+      <p className="page-intro">Acompanhe materiais que você quer comprar e pessoas interessadas nos seus anúncios.</p>
+      <div className="interest-tabs" role="tablist" aria-label="Tipos de interesse">
+        <button type="button" role="tab" aria-selected={activeTab === "sent"} className={activeTab === "sent" ? "active" : ""} onClick={() => selectTab("sent")}>Enviados <span>{sentCount}</span></button>
+        <button type="button" role="tab" aria-selected={activeTab === "received"} className={activeTab === "received" ? "active" : ""} onClick={() => selectTab("received")}>Recebidos <span>{receivedCount}</span></button>
+      </div>
       {loading ? (
-        <p>Carregando conversas...</p>
-      ) : items.length ? (
-        <div className="conversation-list">
-          {items.map((item) => (
-            <Link to={`/conversas/${item.id}`} className="conversation-row" key={item.id}>
+        <p>Carregando interesses...</p>
+      ) : visibleItems.length ? (
+        <div className="interest-center-list" role="tabpanel">
+          {visibleItems.map((item) => (
+            <Link to={`/interesses/${item.conversationId}`} className="interest-center-row" key={item.interestId}>
               <div className="conversation-image">
                 {item.listingImageUrl ? <img src={fileUrl(item.listingImageUrl)} alt="" /> : <span>Sem foto</span>}
               </div>
               <div className="conversation-copy">
-                <div><strong>{item.otherUserDisplayName}</strong><time>{dateTime(item.lastMessageAtUtc)}</time></div>
-                <span>{item.listingTitle}</span>
+                <div><strong>{item.listingTitle}</strong><time>{dateTime(item.lastMessageAtUtc ?? item.interestCreatedAtUtc)}</time></div>
+                <span>{activeTab === "sent" ? `Anunciado por ${item.otherUserDisplayName}` : `Interesse de ${item.otherUserDisplayName}`}</span>
                 <p>{item.lastMessage ?? "Conversa iniciada. Envie a primeira mensagem."}</p>
               </div>
-              {item.unreadCount > 0 && <b className="unread-badge">{item.unreadCount}</b>}
+              <div className="interest-row-meta">
+                <span className={`direction-badge ${item.direction}`}>{item.direction === "sent" ? "Enviado" : "Recebido"}</span>
+                <span className={`status-badge status-${item.listingStatus}`}>{interestStatus(item.listingStatus)}</span>
+                {item.unreadCount > 0 && <b className="unread-badge">{item.unreadCount}</b>}
+                <strong>Ver negociação →</strong>
+              </div>
             </Link>
           ))}
         </div>
       ) : (
-        <div className="empty">Suas conversas aparecerão aqui quando você demonstrar interesse em um material.</div>
+        <div className="empty">{activeTab === "sent" ? "Os materiais em que você demonstrar interesse aparecerão aqui." : "Quando alguém se interessar pelos seus materiais, aparecerá aqui."}</div>
       )}
     </main>
   );
@@ -142,7 +174,7 @@ export function ConversationsPage({ profile }: { profile: Profile | null }) {
 export function ConversationPage({ profile }: { profile: Profile | null }) {
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const [summary, setSummary] = useState<ConversationSummary | null>(null);
+  const [summary, setSummary] = useState<InterestConversation | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [body, setBody] = useState("");
   const [error, setError] = useState("");
@@ -160,31 +192,38 @@ export function ConversationPage({ profile }: { profile: Profile | null }) {
   useEffect(() => {
     if (!profile) return;
     void Promise.all([
-      api<ConversationSummary[]>("/conversations"),
+      api<InterestConversation[]>("/interests"),
       api<ChatMessage[]>(`/conversations/${id}/messages?pageSize=50`),
     ])
       .then(([conversations, initialMessages]) => {
-        const found = conversations.find((item) => item.id === id);
-        if (!found) return navigate("/conversas", { replace: true });
+        const found = conversations.find((item) => item.conversationId === id);
+        if (!found) return navigate("/interesses", { replace: true });
         setSummary(found);
         setMessages(initialMessages);
         setHasOlder(initialMessages.length === 50);
         markRead();
       })
-      .catch(() => navigate("/conversas", { replace: true }));
+      .catch(() => navigate("/interesses", { replace: true }));
 
     const connection = connectHub();
     connectionRef.current = connection;
     connection.on("MessageReceived", (message: ChatMessage) => {
       if (message.conversationId !== id) return;
       setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
-      if (message.senderId !== profile.id) markRead();
+      if (message.type === 0 && message.senderId !== profile.id) markRead();
     });
     connection.on("MessagesRead", (payload: { conversationId: string; readerId: string; readAtUtc: string }) => {
       if (payload.conversationId !== id || payload.readerId === profile.id) return;
       setMessages((current) => current.map((message) =>
         message.senderId === profile.id && !message.readAtUtc ? { ...message, readAtUtc: payload.readAtUtc } : message,
       ));
+    });
+    connection.on("ConversationUpdated", (conversationId: string) => {
+      if (conversationId !== id) return;
+      void api<InterestConversation[]>("/interests").then((items) => {
+        const updated = items.find((item) => item.conversationId === id);
+        if (updated) setSummary(updated);
+      });
     });
     connection.onreconnected(() => connection.invoke("JoinConversation", id));
     let disposed = false;
@@ -236,20 +275,22 @@ export function ConversationPage({ profile }: { profile: Profile | null }) {
 
   return (
     <main className="page chat-page">
-      <Link className="back" to="/conversas">← Voltar às conversas</Link>
+      <Link className="back" to="/interesses">← Voltar aos interesses</Link>
       <section className="chat-shell">
         <header className="chat-header">
           <div>
             <span>CONVERSA COM</span>
             <h1>{summary?.otherUserDisplayName ?? "Carregando..."}</h1>
-            {summary && <Link to={`/materiais/${summary.listingId}`}>{summary.listingTitle} →</Link>}
+            {summary && summary.listingStatus === 1 ? <Link to={`/materiais/${summary.listingId}`}>{summary.listingTitle} →</Link> : summary && <span className="chat-listing-title">{summary.listingTitle}</span>}
           </div>
           {summary && <Link className="secondary-button" to={`/usuarios/${summary.otherUserId}`}>Ver perfil</Link>}
         </header>
+        {statusNotice(summary?.listingStatus) && <div className={`chat-status-banner status-${summary?.listingStatus}`} role="status"><strong>{interestStatus(summary?.listingStatus ?? -1)}</strong><span>{statusNotice(summary?.listingStatus)} A conversa continua disponível para consulta.</span></div>}
         <div className="message-history">
           {hasOlder && <button className="link-button load-older" onClick={() => void loadOlder()}>Carregar mensagens anteriores</button>}
           {!messages.length && <p className="chat-empty">Apresente-se e combine os detalhes da negociação.</p>}
           {messages.map((message) => {
+            if (message.type === 1) return <article className="system-message" key={message.id}><p>{message.body}</p><small>{dateTime(message.createdAtUtc)}</small></article>;
             const mine = message.senderId === profile.id;
             return (
               <article className={mine ? "message mine" : "message"} key={message.id}>

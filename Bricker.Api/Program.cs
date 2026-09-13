@@ -7,6 +7,7 @@ using Bricker.Api.Hubs;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication;
 
+var resetDemoData = args.Contains("--reset-demo-data", StringComparer.OrdinalIgnoreCase);
 var builder = WebApplication.CreateBuilder(args);
 var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");
 Directory.CreateDirectory(uploadsPath);
@@ -105,7 +106,21 @@ app.MapHub<ChatHub>("/hubs/chat");
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<BrickerDbContext>();
-    db.Database.Migrate();
+    if (resetDemoData)
+    {
+        if (!app.Environment.IsDevelopment())
+            throw new InvalidOperationException("A recriação dos dados de demonstração só pode ser executada em desenvolvimento.");
+
+        var connection = db.Database.GetDbConnection();
+        Console.WriteLine("Recriando o banco de desenvolvimento '{0}' em '{1}'...", connection.Database, connection.DataSource);
+        await db.Database.EnsureDeletedAsync();
+    }
+
+    await db.Database.MigrateAsync();
+    if (app.Environment.IsDevelopment())
+        await DevelopmentDataSeeder.SeedAsync(scope.ServiceProvider, app.Environment.ContentRootPath);
 }
+
+if (resetDemoData) return;
 
 app.Run();

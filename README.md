@@ -16,6 +16,22 @@ Marketplace local para compra e revenda de materiais de construcao excedentes.
 
 O endpoint inicial da API e `GET /api/v1/health`.
 
+## Contas de demonstração
+
+Em desenvolvimento, um banco novo recebe anúncios completos, favoritos, interesses com negociações, uma venda e uma avaliação. Todas as contas usam a senha `Bricker123`:
+
+- `ana@demo.bricker.com.br` — anunciante com interesses recebidos e mensagens não lidas.
+- `carlos@demo.bricker.com.br` — anunciante avaliado e com uma avaliação pendente.
+- `marina@demo.bricker.com.br` — compradora e anunciante.
+
+As fotografias dos anúncios ficam em `Bricker.Api/DemoAssets/Listings` e são copiadas automaticamente para a pasta local de uploads.
+
+Para apagar e recriar somente o banco local de desenvolvimento com esses dados:
+
+```powershell
+dotnet run --project Bricker.Api -- --reset-demo-data
+```
+
 ## Configurar o login com Google
 
 Crie um cliente OAuth do tipo **Aplicativo da Web** no Google Cloud e cadastre a URI de redirecionamento:

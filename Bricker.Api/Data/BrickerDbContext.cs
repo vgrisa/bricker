@@ -173,7 +173,7 @@ public sealed class BrickerDbContext(DbContextOptions<BrickerDbContext> options)
         {
             entity.ToTable("ChatMessages");
             entity.HasKey(message => message.Id);
-            entity.Property(message => message.SenderId).HasMaxLength(450).IsRequired();
+            entity.Property(message => message.SenderId).HasMaxLength(450);
             entity.Property(message => message.Body).HasMaxLength(2_000).IsRequired();
             entity.HasIndex(message => new { message.ConversationId, message.CreatedAtUtc });
             entity.HasOne(message => message.Conversation).WithMany(conversation => conversation.Messages)

@@ -20,10 +20,13 @@ public sealed class ChatMessage
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid ConversationId { get; init; }
-    public required string SenderId { get; init; }
+    public string? SenderId { get; init; }
     public required string Body { get; init; }
+    public ChatMessageType Type { get; init; }
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
     public DateTime? ReadAtUtc { get; set; }
     public Conversation Conversation { get; init; } = null!;
-    public AppUser Sender { get; init; } = null!;
+    public AppUser? Sender { get; init; }
 }
+
+public enum ChatMessageType { User, System }

@@ -32,7 +32,7 @@ public sealed class ConversationsController(BrickerDbContext db, UserManager<App
                 OtherUserDisplayName = conversation.BuyerId == userId ? conversation.Seller.DisplayName : conversation.Buyer.DisplayName,
                 LastMessage = conversation.Messages.OrderByDescending(message => message.CreatedAtUtc).Select(message => message.Body).FirstOrDefault(),
                 conversation.LastMessageAtUtc,
-                UnreadCount = conversation.Messages.Count(message => message.SenderId != userId && message.ReadAtUtc == null)
+                UnreadCount = conversation.Messages.Count(message => message.Type == ChatMessageType.User && message.SenderId != userId && message.ReadAtUtc == null)
             })
             .OrderByDescending(conversation => conversation.LastMessageAtUtc)
             .ThenByDescending(conversation => conversation.Id)
@@ -46,7 +46,7 @@ public sealed class ConversationsController(BrickerDbContext db, UserManager<App
     {
         var userId = userManager.GetUserId(User)!;
         var count = await db.ChatMessages.AsNoTracking().CountAsync(message =>
-            message.SenderId != userId && message.ReadAtUtc == null &&
+            message.Type == ChatMessageType.User && message.SenderId != userId && message.ReadAtUtc == null &&
             (message.Conversation.BuyerId == userId || message.Conversation.SellerId == userId), cancellationToken);
         return Ok(new { count });
     }
@@ -61,7 +61,7 @@ public sealed class ConversationsController(BrickerDbContext db, UserManager<App
         if (before is not null) query = query.Where(message => message.CreatedAtUtc < before);
         var messages = await query.OrderByDescending(message => message.CreatedAtUtc).Take(pageSize)
             .Select(message => new ChatMessageResponse(message.Id, message.ConversationId, message.SenderId,
-                message.Sender.DisplayName, message.Body, message.CreatedAtUtc, message.ReadAtUtc))
+                message.Sender == null ? null : message.Sender.DisplayName, message.Body, message.CreatedAtUtc, message.ReadAtUtc, message.Type))
             .ToListAsync(cancellationToken);
         messages.Reverse();
         return Ok(messages);
@@ -77,11 +77,11 @@ public sealed class ConversationsController(BrickerDbContext db, UserManager<App
         if (string.IsNullOrWhiteSpace(body) || body.Length > 2_000) return BadRequest(new { message = "A mensagem deve ter entre 1 e 2.000 caracteres." });
         var sender = await userManager.GetUserAsync(User);
         if (sender is null) return Unauthorized();
-        var message = new ChatMessage { ConversationId = id, SenderId = userId, Body = body };
+        var message = new ChatMessage { ConversationId = id, SenderId = userId, Body = body, Type = ChatMessageType.User };
         conversation.LastMessageAtUtc = message.CreatedAtUtc;
         db.ChatMessages.Add(message);
         await db.SaveChangesAsync(cancellationToken);
-        var response = new ChatMessageResponse(message.Id, id, userId, sender.DisplayName, message.Body, message.CreatedAtUtc, null);
+        var response = new ChatMessageResponse(message.Id, id, userId, sender.DisplayName, message.Body, message.CreatedAtUtc, null, message.Type);
         await hub.Clients.Group(ChatHub.GroupName(id)).SendAsync("MessageReceived", response, cancellationToken);
         await hub.Clients.Groups(ChatHub.UserGroup(conversation.BuyerId), ChatHub.UserGroup(conversation.SellerId))
             .SendAsync("ConversationUpdated", id, cancellationToken);
@@ -94,7 +94,7 @@ public sealed class ConversationsController(BrickerDbContext db, UserManager<App
         var userId = userManager.GetUserId(User)!;
         if (!await IsParticipant(id, userId, cancellationToken)) return NotFound();
         var readAt = DateTime.UtcNow;
-        await db.ChatMessages.Where(message => message.ConversationId == id && message.SenderId != userId && message.ReadAtUtc == null)
+        await db.ChatMessages.Where(message => message.ConversationId == id && message.Type == ChatMessageType.User && message.SenderId != userId && message.ReadAtUtc == null)
             .ExecuteUpdateAsync(update => update.SetProperty(message => message.ReadAtUtc, readAt), cancellationToken);
         await hub.Clients.Group(ChatHub.GroupName(id)).SendAsync("MessagesRead", new { conversationId = id, readerId = userId, readAtUtc = readAt }, cancellationToken);
         await hub.Clients.Group(ChatHub.UserGroup(userId)).SendAsync("ConversationUpdated", id, cancellationToken);
