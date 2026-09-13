@@ -229,13 +229,13 @@ nav a.active {
 }
 .catalog-layout {
   display: grid;
-  grid-template-columns: 250px 1fr;
-  gap: 42px;
+  grid-template-columns: 1fr;
+  gap: 24px;
 }
 .filters {
   border: 1px solid #dce5db;
   background: #ffffff;
-  padding: 24px;
+  padding: 20px 24px;
   border-radius: 14px;
   height: max-content;
   box-shadow: 0 10px 30px rgba(35, 69, 51, 0.06);
@@ -271,20 +271,63 @@ nav a.active {
 }
 .filters-panel.open {
   max-height: 1200px;
-  margin-top: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr) minmax(210px, .7fr);
+  align-items: stretch;
+  gap: 16px;
+  margin-top: 16px;
   opacity: 1;
 }
+.filter-group {
+  min-width: 0;
+  margin: 0;
+  padding: 12px 16px 16px;
+  border: 1px solid #d6e1d5;
+  border-radius: 10px;
+  background: #f7faf6;
+}
+.filter-group legend {
+  padding: 0 7px;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.filter-group-fields {
+  display: grid;
+  gap: 12px;
+}
+.material-filter-fields {
+  grid-template-columns: 1fr 1fr;
+}
+.filter-search {
+  grid-column: 1 / -1;
+}
+.location-filter-fields {
+  grid-template-columns: minmax(0, 1.35fr) minmax(90px, .65fr);
+}
+.price-filter-fields {
+  grid-template-columns: 1fr;
+}
 .clear-filters {
-  width: 100%;
-  margin-top: 8px;
-  padding: 9px;
-  border: 0;
-  background: transparent;
+  grid-column: 1 / -1;
+  justify-self: end;
+  width: auto;
+  min-height: 42px;
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid #c9d6c9;
+  border-radius: 7px;
+  background: white;
   color: var(--green);
   font: inherit;
   font-size: 12px;
   font-weight: 750;
   cursor: pointer;
+}
+.filters .filters-panel label {
+  margin: 0;
 }
 .filters label,
 .form-page label,
@@ -1147,6 +1190,14 @@ textarea {
   background: var(--sage);
   color: var(--green);
 }
+.review-pending-badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f8e7df;
+  color: #994d32;
+  font-size: 10px;
+  font-weight: 800;
+}
 .conversation-image {
   display: grid;
   place-items: center;
@@ -1229,6 +1280,94 @@ textarea {
 }
 .chat-status-banner strong {
   white-space: nowrap;
+}
+.negotiation-review-card {
+  padding: 20px 26px;
+  border-bottom: 1px solid #eadfd7;
+  background: #fffaf6;
+}
+.negotiation-review-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.negotiation-review-heading > div > span {
+  color: var(--terracotta);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+.negotiation-review-heading h2 {
+  margin: 5px 0;
+  color: var(--deep);
+  font-size: 18px;
+}
+.negotiation-review-heading p,
+.negotiation-review-summary p {
+  margin: 0;
+  color: #52665a;
+  font-size: 12px;
+}
+.negotiation-review-summary {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #eadfd7;
+}
+.negotiation-review-rating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.negotiation-review-copy {
+  display: grid;
+  gap: 4px;
+}
+.negotiation-review-summary small,
+.negotiation-review-summary > span:last-child {
+  color: var(--muted);
+  font-size: 10px;
+}
+.negotiation-review-form {
+  display: grid;
+  grid-template-columns: minmax(130px, .35fr) 1fr;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #eadfd7;
+}
+.negotiation-review-form label {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  color: #4c6255;
+  font-size: 12px;
+  font-weight: 750;
+}
+.negotiation-review-form textarea {
+  min-height: 82px;
+}
+.review-form-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.review-form-footer > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.review-form-footer > div {
+  display: flex;
+  gap: 10px;
+}
+.negotiation-review-form .form-error {
+  grid-column: 1 / -1;
 }
 .chat-header h1 {
   margin: 5px 0 4px;
@@ -1330,33 +1469,9 @@ textarea {
   color: var(--muted);
   font-size: 10px;
 }
-.pending-reviews {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-.review-form {
-  padding: 22px;
-  border: 1px solid #dce5db;
-  border-radius: 12px;
-  background: white;
-}
-.review-form > div:first-child {
-  display: grid;
-  gap: 5px;
-}
-.review-form > div:first-child span,
 .public-review > span {
   color: var(--muted);
   font-size: 11px;
-}
-.review-form label {
-  display: grid;
-  gap: 6px;
-  margin: 14px 0;
-  color: #4c6255;
-  font-size: 12px;
-  font-weight: 750;
 }
 .public-profile-hero {
   display: grid;
@@ -1555,6 +1670,24 @@ footer {
   .filters {
     padding: 18px;
   }
+  .filters-panel.open {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    max-height: 1800px;
+  }
+  .material-filter-fields,
+  .location-filter-fields {
+    grid-template-columns: 1fr;
+  }
+  .filter-search {
+    grid-column: 1;
+  }
+  .price-filter-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+  .clear-filters {
+    width: 100%;
+  }
   .interest-list article {
     display: grid;
   }
@@ -1656,6 +1789,36 @@ footer {
     gap: 3px;
     padding: 12px 18px;
   }
+  .negotiation-review-card {
+    padding: 18px;
+  }
+  .negotiation-review-heading {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .negotiation-review-heading .primary-button {
+    width: 100%;
+  }
+  .negotiation-review-summary,
+  .negotiation-review-form {
+    grid-template-columns: 1fr;
+  }
+  .negotiation-review-summary {
+    align-items: start;
+  }
+  .negotiation-review-summary .secondary-button {
+    width: 100%;
+  }
+  .review-form-footer {
+    grid-column: 1;
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .review-form-footer > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
   .message-history {
     height: 52vh;
     min-height: 300px;
@@ -1669,7 +1832,6 @@ footer {
     justify-content: center;
     border-radius: 12px;
   }
-  .pending-reviews,
   .public-profile-hero {
     grid-template-columns: 1fr;
   }

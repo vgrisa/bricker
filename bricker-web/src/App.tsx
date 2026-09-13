@@ -24,7 +24,6 @@ import {
   CompleteProfilePage,
   ConversationPage,
   InterestsPage,
-  PendingReviewsPanel,
   PublicUserPage,
 } from "./community";
 import { useUnreadCount } from "./useUnreadCount";
@@ -293,98 +292,109 @@ function Catalog({ profile }: { profile: Profile | null }) {
             className={filtersOpen ? "filters-panel open" : "filters-panel"}
             hidden={!filtersOpen}
           >
-          <label>
-            Buscar
-            <input
-              value={params.get("search") ?? ""}
-              maxLength={160}
-              onChange={(e) => update("search", e.target.value)}
-              placeholder="Ex.: porcelanato"
-            />
-          </label>
-          <label>
-            Categoria
-            <select
-              value={params.get("category") ?? ""}
-              onChange={(e) => update("category", e.target.value)}
-            >
-              <option value="">Todas</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.slug}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="two">
-            <label>
-              Cidade
-              <input
-                maxLength={100}
-                value={params.get("city") ?? ""}
-                onChange={(e) => update("city", e.target.value)}
-              />
-            </label>
-            <label>
-              UF
-              <input
-                maxLength={2}
-                value={params.get("state") ?? ""}
-                onChange={(e) => update("state", e.target.value.toUpperCase())}
-              />
-            </label>
-          </div>
-          <div className="two">
-            <label>
-              Bairro
-              <input
-                maxLength={100}
-                value={params.get("neighborhood") ?? ""}
-                onChange={(e) => update("neighborhood", e.target.value)}
-              />
-            </label>
-            <label>
-              CEP
-              <input
-                inputMode="numeric"
-                maxLength={9}
-                value={formatPostalCode(params.get("postalCode") ?? "")}
-                onChange={(e) => update("postalCode", formatPostalCode(e.target.value))}
-              />
-            </label>
-          </div>
-          <div className="two">
-            <label>
-              Preço mínimo
-              <input
-                type="number"
-                min="0"
-                value={params.get("minPrice") ?? ""}
-                onChange={(e) => update("minPrice", e.target.value)}
-              />
-            </label>
-            <label>
-              Preço máximo
-              <input
-                type="number"
-                min="0"
-                value={params.get("maxPrice") ?? ""}
-                onChange={(e) => update("maxPrice", e.target.value)}
-              />
-            </label>
-          </div>
-          <label>
-            Condição
-            <select
-              value={params.get("condition") ?? ""}
-              onChange={(e) => update("condition", e.target.value)}
-            >
-              <option value="">Todas</option>
-              <option value="0">Ótimo estado</option>
-              <option value="1">Bom estado</option>
-              <option value="2">Estado regular</option>
-            </select>
-          </label>
+          <fieldset className="filter-group material-filter-group">
+            <legend>Material</legend>
+            <div className="filter-group-fields material-filter-fields">
+              <label className="filter-search">
+                Buscar
+                <input
+                  value={params.get("search") ?? ""}
+                  maxLength={160}
+                  onChange={(e) => update("search", e.target.value)}
+                  placeholder="Título, descrição ou vendedor"
+                />
+              </label>
+              <label>
+                Categoria
+                <select
+                  value={params.get("category") ?? ""}
+                  onChange={(e) => update("category", e.target.value)}
+                >
+                  <option value="">Todas</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.slug}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Condição
+                <select
+                  value={params.get("condition") ?? ""}
+                  onChange={(e) => update("condition", e.target.value)}
+                >
+                  <option value="">Todas</option>
+                  <option value="0">Ótimo estado</option>
+                  <option value="1">Bom estado</option>
+                  <option value="2">Estado regular</option>
+                </select>
+              </label>
+            </div>
+          </fieldset>
+          <fieldset className="filter-group location-filter-group">
+            <legend>Localização</legend>
+            <div className="filter-group-fields location-filter-fields">
+              <label>
+                Cidade
+                <input
+                  maxLength={100}
+                  value={params.get("city") ?? ""}
+                  onChange={(e) => update("city", e.target.value)}
+                />
+              </label>
+              <label>
+                UF
+                <input
+                  maxLength={2}
+                  value={params.get("state") ?? ""}
+                  onChange={(e) => update("state", e.target.value.toUpperCase())}
+                />
+              </label>
+              <label>
+                Bairro
+                <input
+                  maxLength={100}
+                  value={params.get("neighborhood") ?? ""}
+                  onChange={(e) => update("neighborhood", e.target.value)}
+                />
+              </label>
+              <label>
+                CEP
+                <input
+                  inputMode="numeric"
+                  maxLength={9}
+                  value={formatPostalCode(params.get("postalCode") ?? "")}
+                  onChange={(e) => update("postalCode", formatPostalCode(e.target.value))}
+                />
+              </label>
+            </div>
+          </fieldset>
+          <fieldset className="filter-group price-filter-group">
+            <legend>Faixa de preço</legend>
+            <div className="filter-group-fields price-filter-fields">
+              <label>
+                Mínimo
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="R$ 0"
+                  value={params.get("minPrice") ?? ""}
+                  onChange={(e) => update("minPrice", e.target.value)}
+                />
+              </label>
+              <label>
+                Máximo
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Sem limite"
+                  value={params.get("maxPrice") ?? ""}
+                  onChange={(e) => update("maxPrice", e.target.value)}
+                />
+              </label>
+            </div>
+          </fieldset>
           {(params.get("search") ||
             params.get("category") ||
             params.get("city") ||
@@ -1096,6 +1106,7 @@ function ProfilePage({
   profile: Profile | null;
   setProfile: (p: Profile) => void;
 }) {
+  const navigate = useNavigate();
   const [mine, setMine] = useState<Listing[]>([]);
   const [interests, setInterests] = useState<Interest[]>([]);
   const [favorites, setFavorites] = useState<Listing[]>([]);
@@ -1161,12 +1172,14 @@ function ProfilePage({
     if (!saleListing || !saleInterestId) return;
     setSaleError("");
     try {
+      const conversationId = interests.find((item) => item.id === saleInterestId)?.conversationId;
       await api(`/listings/${saleListing.id}/complete-sale`, {
         method: "POST",
         body: JSON.stringify({ interestId: saleInterestId }),
       });
       setMine((current) => current.map((item) => item.id === saleListing.id ? { ...item, status: 3, hasConfirmedSale: true } : item));
       setSaleListing(null);
+      navigate(conversationId ? `/interesses/${conversationId}` : "/interesses");
     } catch (reason) {
       setSaleError(reason instanceof Error ? reason.message : "Não foi possível concluir a venda.");
     }
@@ -1316,7 +1329,6 @@ function ProfilePage({
           )}
         </div>
       </section>
-      <PendingReviewsPanel />
       <section className="profile-section">
         <div className="profile-section-heading">
           <span className="section-kicker">SALVOS</span>

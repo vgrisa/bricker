@@ -42,7 +42,10 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
-            query = query.Where(listing => listing.Title.Contains(term) || listing.Description.Contains(term));
+            query = query.Where(listing =>
+                listing.Title.Contains(term) ||
+                listing.Description.Contains(term) ||
+                listing.SellerDisplayName.Contains(term));
         }
 
         if (!string.IsNullOrWhiteSpace(category)) query = query.Where(listing => listing.Category.Slug == category.Trim().ToLower());

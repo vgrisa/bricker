@@ -7,7 +7,7 @@ import {
   hubUrl,
   type ChatMessage,
   type InterestConversation,
-  type PendingReview,
+  type InterestReviewContext,
   type Profile,
   type PublicUserProfile,
   type UserReview,
@@ -158,6 +158,7 @@ export function InterestsPage({ profile }: { profile: Profile | null }) {
               <div className="interest-row-meta">
                 <span className={`direction-badge ${item.direction}`}>{item.direction === "sent" ? "Enviado" : "Recebido"}</span>
                 <span className={`status-badge status-${item.listingStatus}`}>{interestStatus(item.listingStatus)}</span>
+                {item.review?.status === "pending" && <span className="review-pending-badge">Avaliação pendente</span>}
                 {item.unreadCount > 0 && <b className="unread-badge">{item.unreadCount}</b>}
                 <strong>Ver negociação →</strong>
               </div>
@@ -286,6 +287,7 @@ export function ConversationPage({ profile }: { profile: Profile | null }) {
           {summary && <Link className="secondary-button" to={`/usuarios/${summary.otherUserId}`}>Ver perfil</Link>}
         </header>
         {statusNotice(summary?.listingStatus) && <div className={`chat-status-banner status-${summary?.listingStatus}`} role="status"><strong>{interestStatus(summary?.listingStatus ?? -1)}</strong><span>{statusNotice(summary?.listingStatus)} A conversa continua disponível para consulta.</span></div>}
+        {summary?.review && <NegotiationReviewCard context={summary.review} onChange={(review) => setSummary((current) => current?.review ? { ...current, review: { ...current.review, status: "completed", myReview: review } } : current)} />}
         <div className="message-history">
           {hasOlder && <button className="link-button load-older" onClick={() => void loadOlder()}>Carregar mensagens anteriores</button>}
           {!messages.length && <p className="chat-empty">Apresente-se e combine os detalhes da negociação.</p>}
@@ -315,41 +317,66 @@ function Stars({ value }: { value: number }) {
   return <span className="stars" aria-label={`${value} de 5 estrelas`}>{"★".repeat(value)}{"☆".repeat(5 - value)}</span>;
 }
 
-function ReviewForm({ pending, onCreated }: { pending: PendingReview; onCreated: () => void }) {
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState("");
+function NegotiationReviewCard({ context, onChange }: { context: InterestReviewContext; onChange: (review: UserReview) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [rating, setRating] = useState(context.myReview?.rating ?? 5);
+  const [comment, setComment] = useState(context.myReview?.comment ?? "");
   const [error, setError] = useState("");
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    setError("");
     try {
-      await api<UserReview>(`/sales/${pending.saleId}/reviews`, {
-        method: "POST",
+      const review = await api<UserReview>(context.myReview ? `/reviews/${context.myReview.id}` : `/sales/${context.saleId}/reviews`, {
+        method: context.myReview ? "PUT" : "POST",
         body: JSON.stringify({ rating, comment }),
       });
-      onCreated();
+      onChange(review);
+      setEditing(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Não foi possível publicar a avaliação.");
+      setError(reason instanceof Error ? reason.message : "Não foi possível salvar a avaliação.");
     }
   };
-  return (
-    <form className="review-form" onSubmit={submit}>
-      <div><strong>{pending.listingTitle}</strong><span>Avalie {pending.revieweeDisplayName} como {pending.revieweeRole.toLowerCase()}</span></div>
-      <label>Nota<select value={rating} onChange={(event) => setRating(Number(event.target.value))}>{[5, 4, 3, 2, 1].map((number) => <option key={number} value={number}>{number} estrela{number > 1 ? "s" : ""}</option>)}</select></label>
-      <label>Comentário opcional<textarea maxLength={1000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
-      {error && <p className="form-error">{error}</p>}
-      <button className="primary-button">Publicar avaliação</button>
-    </form>
-  );
-}
 
-export function PendingReviewsPanel() {
-  const [items, setItems] = useState<PendingReview[]>([]);
-  useEffect(() => { void api<PendingReview[]>("/sales/reviews/pending").then(setItems); }, []);
-  if (!items.length) return null;
+  const cancel = () => {
+    setRating(context.myReview?.rating ?? 5);
+    setComment(context.myReview?.comment ?? "");
+    setError("");
+    setEditing(false);
+  };
+
+  const beginEdit = () => {
+    setRating(context.myReview?.rating ?? 5);
+    setComment(context.myReview?.comment ?? "");
+    setError("");
+    setEditing(true);
+  };
+
   return (
-    <section className="profile-section">
-      <div className="profile-section-heading"><span className="section-kicker">REPUTAÇÃO</span><h2>Avaliações pendentes</h2></div>
-      <div className="pending-reviews">{items.map((item) => <ReviewForm key={item.saleId} pending={item} onCreated={() => setItems((current) => current.filter((entry) => entry.saleId !== item.saleId))} />)}</div>
+    <section className="negotiation-review-card" aria-labelledby="negotiation-review-title">
+      <div className="negotiation-review-heading">
+        <div>
+          <span>AVALIAÇÃO DA NEGOCIAÇÃO</span>
+          <h2 id="negotiation-review-title">{context.myReview ? `Sua avaliação de ${context.revieweeDisplayName}` : `Como foi negociar com ${context.revieweeDisplayName}?`}</h2>
+          <p>Avalie a experiência com {context.revieweeDisplayName} como {context.revieweeRole.toLowerCase()}.</p>
+        </div>
+        {!context.myReview && !editing && <button className="primary-button" type="button" onClick={beginEdit}>Avaliar agora</button>}
+      </div>
+      {context.myReview && !editing && (
+        <div className="negotiation-review-summary">
+          <div className="negotiation-review-rating"><Stars value={context.myReview.rating} /><strong>{context.myReview.rating} de 5</strong></div>
+          <div className="negotiation-review-copy"><p>{context.myReview.comment || "Avaliação enviada sem comentário."}</p><small>Publicada em {dateTime(context.myReview.createdAtUtc)}</small></div>
+          {context.myReview.canEdit ? <button className="secondary-button" type="button" onClick={beginEdit}>Editar avaliação</button> : <span>O prazo de edição terminou.</span>}
+        </div>
+      )}
+      {editing && (
+        <form className="negotiation-review-form" onSubmit={submit}>
+          <label>Nota<select value={rating} onChange={(event) => setRating(Number(event.target.value))}>{[5, 4, 3, 2, 1].map((number) => <option key={number} value={number}>{number} estrela{number > 1 ? "s" : ""}</option>)}</select></label>
+          <label>Comentário opcional<textarea maxLength={1000} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Conte como foi a negociação" /></label>
+          <div className="review-form-footer"><span>{comment.length}/1.000</span><div><button className="secondary-button" type="button" onClick={cancel}>Cancelar</button><button className="primary-button">{context.myReview ? "Salvar alterações" : "Publicar avaliação"}</button></div></div>
+          {error && <p className="form-error">{error}</p>}
+        </form>
+      )}
     </section>
   );
 }

@@ -82,6 +82,7 @@ public sealed class InterestCenterController(BrickerDbContext db, UserManager<Ap
     public async Task<ActionResult<IReadOnlyCollection<InterestConversationResponse>>> List(CancellationToken cancellationToken)
     {
         var userId = userManager.GetUserId(User)!;
+        var now = DateTime.UtcNow;
         var rows = await db.Conversations.AsNoTracking()
             .Where(conversation => conversation.BuyerId == userId || conversation.SellerId == userId)
             .Select(conversation => new
@@ -103,9 +104,35 @@ public sealed class InterestCenterController(BrickerDbContext db, UserManager<Ap
             .OrderByDescending(item => item.LastMessageAtUtc ?? item.InterestCreatedAtUtc)
             .ToListAsync(cancellationToken);
 
-        return Ok(rows.Select(row => new InterestConversationResponse(
-            row.InterestId, row.ConversationId, row.Direction, row.InterestCreatedAtUtc,
-            row.ListingId, row.ListingTitle, row.ListingImageUrl, row.ListingStatus,
-            row.OtherUserId, row.OtherUserDisplayName, row.LastMessage, row.LastMessageAtUtc, row.UnreadCount)));
+        var interestIds = rows.Select(row => row.InterestId).ToList();
+        var sales = await db.ListingSales.AsNoTracking()
+            .Include(sale => sale.Listing)
+            .Include(sale => sale.Reviews)
+                .ThenInclude(review => review.Reviewer)
+            .Where(sale => interestIds.Contains(sale.ListingInterestId))
+            .ToDictionaryAsync(sale => sale.ListingInterestId, cancellationToken);
+
+        return Ok(rows.Select(row =>
+        {
+            InterestReviewContextResponse? reviewContext = null;
+            if (sales.TryGetValue(row.InterestId, out var sale))
+            {
+                var myReview = sale.Reviews.SingleOrDefault(review => review.ReviewerId == userId);
+                var review = myReview is null
+                    ? null
+                    : new UserReviewResponse(myReview.Id, sale.Id, myReview.ReviewerId, myReview.Reviewer.DisplayName,
+                        myReview.RevieweeId == sale.SellerId ? "Vendedor" : "Comprador", sale.Listing.Title,
+                        myReview.Rating, myReview.Comment, myReview.CreatedAtUtc, myReview.UpdatedAtUtc,
+                        now <= myReview.CreatedAtUtc.AddDays(7));
+                reviewContext = new InterestReviewContextResponse(sale.Id, review is null ? "pending" : "completed",
+                    row.OtherUserId, row.OtherUserDisplayName, sale.BuyerId == userId ? "Vendedor" : "Comprador",
+                    sale.ConfirmedAtUtc, review);
+            }
+
+            return new InterestConversationResponse(row.InterestId, row.ConversationId, row.Direction,
+                row.InterestCreatedAtUtc, row.ListingId, row.ListingTitle, row.ListingImageUrl, row.ListingStatus,
+                row.OtherUserId, row.OtherUserDisplayName, row.LastMessage, row.LastMessageAtUtc, row.UnreadCount,
+                reviewContext);
+        }));
     }
 }

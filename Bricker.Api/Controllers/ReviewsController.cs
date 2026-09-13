@@ -13,21 +13,6 @@ namespace Bricker.Api.Controllers;
 [Route("api/v1/sales")]
 public sealed class SalesReviewsController(BrickerDbContext db, UserManager<AppUser> userManager) : ControllerBase
 {
-    [HttpGet("reviews/pending")]
-    public async Task<ActionResult<IReadOnlyCollection<PendingReviewResponse>>> Pending(CancellationToken cancellationToken)
-    {
-        var userId = userManager.GetUserId(User)!;
-        var pending = await db.ListingSales.AsNoTracking()
-            .Where(sale => (sale.BuyerId == userId || sale.SellerId == userId) && !sale.Reviews.Any(review => review.ReviewerId == userId))
-            .OrderByDescending(sale => sale.ConfirmedAtUtc)
-            .Select(sale => new PendingReviewResponse(sale.Id, sale.ListingId, sale.Listing.Title,
-                sale.BuyerId == userId ? sale.SellerId : sale.BuyerId,
-                sale.BuyerId == userId ? sale.Seller.DisplayName : sale.Buyer.DisplayName,
-                sale.BuyerId == userId ? "Vendedor" : "Comprador", sale.ConfirmedAtUtc))
-            .ToListAsync(cancellationToken);
-        return Ok(pending);
-    }
-
     [HttpPost("{saleId:guid}/reviews")]
     public async Task<ActionResult<UserReviewResponse>> Create(Guid saleId, ReviewRequest request, CancellationToken cancellationToken)
     {

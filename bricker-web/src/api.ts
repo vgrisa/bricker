@@ -63,10 +63,25 @@ export type Interest = {
   createdAtUtc: string;
 };
 export type InterestCreated = { interestId: string; conversationId: string };
-export type InterestConversation = { interestId: string; conversationId: string; direction: "sent" | "received"; interestCreatedAtUtc: string; listingId: string; listingTitle: string; listingImageUrl?: string; listingStatus: number; otherUserId: string; otherUserDisplayName: string; lastMessage?: string; lastMessageAtUtc?: string; unreadCount: number };
+export type InterestConversation = {
+  interestId: string;
+  conversationId: string;
+  direction: "sent" | "received";
+  interestCreatedAtUtc: string;
+  listingId: string;
+  listingTitle: string;
+  listingImageUrl?: string;
+  listingStatus: number;
+  otherUserId: string;
+  otherUserDisplayName: string;
+  lastMessage?: string;
+  lastMessageAtUtc?: string;
+  unreadCount: number;
+  review?: InterestReviewContext;
+};
 export type ChatMessage = { id: string; conversationId: string; senderId?: string; senderDisplayName?: string; body: string; createdAtUtc: string; readAtUtc?: string; type: number };
-export type PendingReview = { saleId: string; listingId: string; listingTitle: string; revieweeId: string; revieweeDisplayName: string; revieweeRole: string; confirmedAtUtc: string };
 export type UserReview = { id: string; saleId: string; reviewerId: string; reviewerDisplayName: string; revieweeRole: string; listingTitle: string; rating: number; comment?: string; createdAtUtc: string; updatedAtUtc?: string; canEdit: boolean };
+export type InterestReviewContext = { saleId: string; status: "pending" | "completed"; revieweeId: string; revieweeDisplayName: string; revieweeRole: string; confirmedAtUtc: string; myReview?: UserReview };
 export type PublicUserProfile = { id: string; displayName: string; city?: string; state?: string; createdAtUtc: string; rating?: number; reviewCount: number; reviews: UserReview[]; page: number; pageSize: number; totalCount: number };
 
 export async function api<T>(path: string, options: RequestInit = {}) {
