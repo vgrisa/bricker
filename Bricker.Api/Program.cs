@@ -126,10 +126,11 @@ app.Use(async (context, next) =>
     if (context.User.Identity?.IsAuthenticated == true)
     {
         var path = context.Request.Path;
+        var requiresCompletedProfile = path.StartsWithSegments("/api") || path.StartsWithSegments("/hubs");
         var allowedWhileIncomplete = path.StartsWithSegments("/api/v1/profile") ||
             path.StartsWithSegments("/api/v1/auth/logout") ||
             path.StartsWithSegments("/api/v1/auth/google");
-        if (!allowedWhileIncomplete)
+        if (requiresCompletedProfile && !allowedWhileIncomplete)
         {
             var userManager = context.RequestServices.GetRequiredService<UserManager<AppUser>>();
             var user = await userManager.GetUserAsync(context.User);
