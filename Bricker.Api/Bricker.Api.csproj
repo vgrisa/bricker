@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>Bricker.Api-58ea1217-4c23-4939-87db-58f852848e5d</UserSecretsId>
+    <SpaRoot>..\bricker-web\</SpaRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,5 +17,20 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.11" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="DemoAssets\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="IncludeFrontendInPublish" BeforeTargets="ComputeFilesToPublish">
+    <Error Condition="!Exists('$(SpaRoot)dist\index.html')" Text="O frontend ainda não foi compilado. Execute npm ci e npm run build em bricker-web antes de publicar." />
+    <ItemGroup>
+      <FrontendDistFiles Include="$(SpaRoot)dist\**\*" />
+      <ResolvedFileToPublish Include="@(FrontendDistFiles)" Exclude="@(ResolvedFileToPublish)">
+        <RelativePath>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
 </Project>

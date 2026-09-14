@@ -6,26 +6,56 @@ using Microsoft.Extensions.FileProviders;
 using Bricker.Api.Hubs;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
+using Bricker.Api.Storage;
 
 var resetDemoData = args.Contains("--reset-demo-data", StringComparer.OrdinalIgnoreCase);
 var builder = WebApplication.CreateBuilder(args);
-var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");
-Directory.CreateDirectory(uploadsPath);
-
 const string frontEndPolicy = "BrickerWeb";
 
 builder.Services.AddControllers();
-builder.Configuration.AddJsonFile("appsettings.Development.local.json", optional: true, reloadOnChange: true);
+if (builder.Environment.IsDevelopment())
+    builder.Configuration.AddJsonFile("appsettings.Development.local.json", optional: true, reloadOnChange: true);
 // Environment variables and command-line values must override local development settings.
 builder.Configuration.AddEnvironmentVariables();
 builder.Configuration.AddCommandLine(args);
 
+var configuredUploadsPath = builder.Configuration["Storage:UploadsPath"];
+var uploadsPath = string.IsNullOrWhiteSpace(configuredUploadsPath)
+    ? Path.Combine(builder.Environment.ContentRootPath, "uploads")
+    : configuredUploadsPath;
+var uploadStorage = new UploadStorage(uploadsPath);
+builder.Services.AddSingleton(uploadStorage);
+
+if (!builder.Environment.IsDevelopment())
+{
+    var configuredKeysPath = builder.Configuration["DataProtection:KeysPath"];
+    var keysPath = string.IsNullOrWhiteSpace(configuredKeysPath)
+        ? Path.GetFullPath(Path.Combine(uploadStorage.RootPath, "..", "data-protection"))
+        : configuredKeysPath;
+    Directory.CreateDirectory(keysPath);
+    builder.Services.AddDataProtection()
+        .SetApplicationName("Bricker")
+        .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+}
+
 var connectionString = builder.Configuration.GetConnectionString("BrickerDb")
     ?? throw new InvalidOperationException("A connection string 'BrickerDb' não foi configurada.");
 
-builder.Services.AddDbContext<BrickerDbContext>(options => options.UseSqlServer(connectionString));
+builder.Services.AddDbContext<BrickerDbContext>(options =>
+    options.UseSqlServer(connectionString, sqlServer => sqlServer.EnableRetryOnFailure()));
 var authentication = builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme);
 authentication.AddIdentityCookies();
+builder.Services.Configure<CookieAuthenticationOptions>(IdentityConstants.ApplicationScheme, options =>
+{
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+        ? CookieSecurePolicy.SameAsRequest
+        : CookieSecurePolicy.Always;
+});
 var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
 var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
 if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret))
@@ -68,14 +98,28 @@ builder.Services.AddCors(options =>
               .AllowCredentials());
 });
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var app = builder.Build();
 
+if (!app.Environment.IsDevelopment())
+{
+    app.UseForwardedHeaders();
+    app.UseHttpsRedirection();
+}
+
+app.UseStaticFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(uploadsPath),
+    FileProvider = new PhysicalFileProvider(uploadStorage.RootPath),
     RequestPath = "/uploads"
 });
-app.UseCors(frontEndPolicy);
+if (app.Environment.IsDevelopment()) app.UseCors(frontEndPolicy);
 app.UseAuthentication();
 app.Use(async (context, next) =>
 {
@@ -102,6 +146,9 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
+var webRootPath = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (!app.Environment.IsDevelopment() && File.Exists(Path.Combine(webRootPath, "index.html")))
+    app.MapFallbackToFile("index.html");
 
 using (var scope = app.Services.CreateScope())
 {
@@ -117,7 +164,7 @@ using (var scope = app.Services.CreateScope())
     }
 
     await db.Database.MigrateAsync();
-    if (app.Environment.IsDevelopment())
+    if (app.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("DemoData:Seed"))
         await DevelopmentDataSeeder.SeedAsync(scope.ServiceProvider, app.Environment.ContentRootPath);
 }
 

@@ -8,12 +8,13 @@ using Microsoft.EntityFrameworkCore;
 using Bricker.Api.Validation;
 using Bricker.Api.Hubs;
 using Microsoft.AspNetCore.SignalR;
+using Bricker.Api.Storage;
 
 namespace Bricker.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/listings")]
-public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser> userManager, IWebHostEnvironment environment, IHubContext<ChatHub> hub) : ControllerBase
+public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser> userManager, UploadStorage uploadStorage, IHubContext<ChatHub> hub) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResponse<ListingResponse>>> Search(
@@ -289,7 +290,7 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         if (image is null) return NotFound();
         if (await db.ListingImages.CountAsync(item => item.ListingId == id, cancellationToken) <= 1)
             return BadRequest(new { message = "O anúncio precisa manter pelo menos uma foto." });
-        DeleteImage(image.Url);
+        uploadStorage.Delete(image.Url);
         db.ListingImages.Remove(image);
         if (image.Listing.ImageUrl == image.Url) image.Listing.ImageUrl = await db.ListingImages.Where(item => item.ListingId == id && item.Id != imageId).OrderBy(item => item.SortOrder).Select(item => item.Url).FirstOrDefaultAsync(cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
@@ -358,27 +359,13 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
         };
             if (!extensions.TryGetValue(image.ContentType, out var extension)) throw new BadHttpRequestException("Envie imagens JPG, PNG ou WEBP.");
 
-            var relativeFolder = Path.Combine("uploads", "listings");
-            var folder = Path.Combine(environment.ContentRootPath, relativeFolder);
-            Directory.CreateDirectory(folder);
-            var fileName = $"{Guid.NewGuid():N}{extension}";
-            await using var stream = System.IO.File.Create(Path.Combine(folder, fileName));
-            await image.CopyToAsync(stream, cancellationToken);
-            var url = $"/{relativeFolder.Replace('\\', '/')}/{fileName}";
+            var url = await uploadStorage.SaveListingImageAsync(image, extension, cancellationToken);
             var listingImage = new ListingImage { Url = url, SortOrder = existingCount++ };
             listing.Images.Add(listingImage);
             addedImages.Add(listingImage);
             listing.ImageUrl ??= url;
         }
         return addedImages;
-    }
-
-    private void DeleteImage(string? imageUrl)
-    {
-        if (string.IsNullOrWhiteSpace(imageUrl)) return;
-        var relativePath = imageUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-        var fullPath = Path.Combine(environment.ContentRootPath, relativePath);
-        if (System.IO.File.Exists(fullPath)) System.IO.File.Delete(fullPath);
     }
 
     private async Task SetListingStatus(Listing listing, ListingStatus status, CancellationToken cancellationToken)

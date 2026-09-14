@@ -1,6 +1,7 @@
 using Bricker.Api.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Bricker.Api.Storage;
 
 namespace Bricker.Api.Data;
 
@@ -17,7 +18,7 @@ public static class DevelopmentDataSeeder
         var db = services.GetRequiredService<BrickerDbContext>();
         var userManager = services.GetRequiredService<UserManager<AppUser>>();
 
-        CopyAssets(contentRootPath);
+        services.GetRequiredService<UploadStorage>().CopyDemoAssets(contentRootPath);
 
         var demoUsers = await db.Users.CountAsync(user =>
             user.Id == AnaId || user.Id == CarlosId || user.Id == MarinaId, cancellationToken);
@@ -267,12 +268,4 @@ public static class DevelopmentDataSeeder
         conversation.LastMessageAtUtc = createdAt;
     }
 
-    private static void CopyAssets(string contentRootPath)
-    {
-        var source = Path.Combine(contentRootPath, "DemoAssets", "Listings");
-        var destination = Path.Combine(contentRootPath, "uploads", "demo");
-        Directory.CreateDirectory(destination);
-        foreach (var file in Directory.EnumerateFiles(source, "*.webp"))
-            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
-    }
 }

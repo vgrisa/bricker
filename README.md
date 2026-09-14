@@ -46,3 +46,9 @@ dotnet user-secrets set "Authentication:Google:ClientSecret" "SEU_CLIENT_SECRET"
 ```
 
 Também é possível usar as variáveis de ambiente `Authentication__Google__ClientId` e `Authentication__Google__ClientSecret`. Depois de configurar, reinicie a API pelo Visual Studio.
+
+## Publicar no Azure
+
+O build de produção reúne o React e a API em um único App Service, mantendo o desenvolvimento local separado. O workflow do GitHub compila e publica a aplicação, enquanto banco, credenciais e uploads são configurados no Azure.
+
+Consulte [docs/AZURE_DEPLOY.md](docs/AZURE_DEPLOY.md) para criar o App Service F1, o Azure SQL gratuito, configurar o Google e autorizar o deploy automático por OIDC.

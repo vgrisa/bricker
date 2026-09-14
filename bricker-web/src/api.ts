@@ -1,8 +1,16 @@
+const configuredApiUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
+
 export const apiUrl =
-  import.meta.env.VITE_API_URL ?? "http://localhost:5190/api/v1";
-export const hubUrl = `${apiUrl.replace(/\/api\/v1\/?$/, "")}/hubs/chat`;
-export const fileUrl = (path?: string | null) =>
-  path ? `http://localhost:5190${path}` : undefined;
+  configuredApiUrl ?? (import.meta.env.DEV ? "http://localhost:5190/api/v1" : "/api/v1");
+
+const backendUrl = apiUrl.replace(/\/api\/v1\/?$/, "");
+
+export const hubUrl = `${backendUrl}/hubs/chat`;
+export const fileUrl = (path?: string | null) => {
+  if (!path) return undefined;
+  if (/^(https?:|blob:|data:)/i.test(path)) return path;
+  return `${backendUrl}${path.startsWith("/") ? path : `/${path}`}`;
+};
 
 export type Category = { id: string; name: string; slug: string };
 export type Listing = {

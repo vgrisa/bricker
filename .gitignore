@@ -4,6 +4,7 @@ obj/
 node_modules/
 dist/
 .vs/
+.data-protection/
 
 # Local configuration and generated uploads
 .env
