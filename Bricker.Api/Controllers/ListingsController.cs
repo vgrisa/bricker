@@ -20,13 +20,10 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     public async Task<ActionResult<PagedResponse<ListingResponse>>> Search(
         [FromQuery] string? search,
         [FromQuery] string? category,
-        [FromQuery] string? city,
-        [FromQuery] string? state,
-        [FromQuery] string? neighborhood,
-        [FromQuery] string? postalCode,
+        [FromQuery] string? location,
         [FromQuery] decimal? minPrice,
         [FromQuery] decimal? maxPrice,
-        [FromQuery] MaterialCondition? condition,
+        [FromQuery] string? condition,
         [FromQuery] string? sort,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 12,
@@ -34,7 +31,7 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 50);
-        if (search?.Length > 160 || city?.Length > 100 || state?.Length > 2 || neighborhood?.Length > 100 || postalCode?.Length > 9)
+        if (search?.Length > 160 || location?.Length > 160 || category?.Length > 300 || condition?.Length > 30)
             return BadRequest(new { message = "Um ou mais filtros excedem o tamanho permitido." });
 
         var query = db.Listings.AsNoTracking().Include(listing => listing.Category).Include(listing => listing.Images)
@@ -49,18 +46,33 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
                 listing.SellerDisplayName.Contains(term));
         }
 
-        if (!string.IsNullOrWhiteSpace(category)) query = query.Where(listing => listing.Category.Slug == category.Trim().ToLower());
-        if (!string.IsNullOrWhiteSpace(city)) query = query.Where(listing => listing.City.StartsWith(city.Trim()));
-        if (!string.IsNullOrWhiteSpace(state)) query = query.Where(listing => listing.State.StartsWith(state.Trim().ToUpper()));
-        if (!string.IsNullOrWhiteSpace(neighborhood)) query = query.Where(listing => listing.Neighborhood != null && listing.Neighborhood.StartsWith(neighborhood.Trim()));
-        if (!string.IsNullOrWhiteSpace(postalCode))
+        var categorySlugs = SplitValues(category).Select(value => value.ToLowerInvariant()).ToArray();
+        if (categorySlugs.Length > 0)
+            query = query.Where(listing => categorySlugs.Contains(listing.Category.Slug));
+
+        if (!string.IsNullOrWhiteSpace(location))
         {
-            var digits = InputValidation.Digits(postalCode);
-            query = query.Where(listing => listing.PostalCode != null && listing.PostalCode.StartsWith(digits));
+            var term = location.Trim();
+            var postalCode = InputValidation.Digits(term);
+            query = query.Where(listing =>
+                listing.City.Contains(term) ||
+                listing.State.Contains(term) ||
+                (listing.Neighborhood != null && listing.Neighborhood.Contains(term)) ||
+                (listing.Street != null && listing.Street.Contains(term)) ||
+                (postalCode.Length > 0 && listing.PostalCode != null && listing.PostalCode.Contains(postalCode)));
         }
         if (minPrice is not null) query = query.Where(listing => listing.Price >= minPrice);
         if (maxPrice is not null) query = query.Where(listing => listing.Price <= maxPrice);
-        if (condition is not null) query = query.Where(listing => listing.Condition == condition);
+        var conditions = SplitValues(condition)
+            .Select(value => int.TryParse(value, out var numeric) && Enum.IsDefined(typeof(MaterialCondition), numeric)
+                ? (MaterialCondition?)numeric
+                : null)
+            .Where(value => value is not null)
+            .Select(value => value!.Value)
+            .ToArray();
+        if (!string.IsNullOrWhiteSpace(condition) && conditions.Length == 0)
+            return BadRequest(new { message = "A condição informada é inválida." });
+        if (conditions.Length > 0) query = query.Where(listing => conditions.Contains(listing.Condition));
 
         var totalCount = await query.CountAsync(cancellationToken);
         query = sort switch
@@ -77,6 +89,9 @@ public sealed class ListingsController(BrickerDbContext db, UserManager<AppUser>
 
         return Ok(new PagedResponse<ListingResponse>(items, page, pageSize, totalCount));
     }
+
+    private static IEnumerable<string> SplitValues(string? values) =>
+        (values ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ListingResponse>> GetById(Guid id, CancellationToken cancellationToken)

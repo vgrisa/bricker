@@ -46,6 +46,18 @@ const formatPhone = (value: string) => {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
+const formatPriceInput = (value?: string | null) => {
+  if (!value || !Number.isFinite(Number(value))) return "";
+  return Number(value).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+  });
+};
+const parsePriceInput = (value: string) => {
+  const digits = onlyDigits(value);
+  return digits ? String(Number(digits) / 100) : "";
+};
 
 function Layout({
   profile,
@@ -298,6 +310,35 @@ function Catalog({ profile }: { profile: Profile | null }) {
     setLoading(true);
     setParams(next);
   };
+  const selectedCategories = (params.get("category") ?? "").split(",").filter(Boolean);
+  const selectedConditions = (params.get("condition") ?? "").split(",").filter(Boolean);
+  const priceLimit = 50000;
+  const minPrice = Math.min(priceLimit, Math.max(0, Number(params.get("minPrice") ?? 0)));
+  const maxPrice = Math.min(priceLimit, Math.max(minPrice, Number(params.get("maxPrice") ?? priceLimit)));
+  const toggleFilterValue = (name: "category" | "condition", value: string) => {
+    const selected = (params.get(name) ?? "").split(",").filter(Boolean);
+    const nextValues = selected.includes(value)
+      ? selected.filter((item) => item !== value)
+      : [...selected, value];
+    update(name, nextValues.join(","));
+  };
+  const updatePriceRange = (name: "minPrice" | "maxPrice", value: number) => {
+    const next = new URLSearchParams(params);
+    if (name === "minPrice") {
+      if (value > 0) next.set("minPrice", String(value)); else next.delete("minPrice");
+      if (value > maxPrice) {
+        if (value < priceLimit) next.set("maxPrice", String(value)); else next.delete("maxPrice");
+      }
+    } else {
+      if (value < priceLimit) next.set("maxPrice", String(value)); else next.delete("maxPrice");
+      if (value < minPrice) {
+        if (value > 0) next.set("minPrice", String(value)); else next.delete("minPrice");
+      }
+    }
+    next.delete("page");
+    setLoading(true);
+    setParams(next);
+  };
   const toggleFavorite = async (item: Listing) => {
     if (!profile) return navigate("/entrar");
     const isFavorite = favoriteIds.has(item.id);
@@ -330,115 +371,53 @@ function Catalog({ profile }: { profile: Profile | null }) {
             className={filtersOpen ? "filters-panel open" : "filters-panel"}
             hidden={!filtersOpen}
           >
-          <fieldset className="filter-group material-filter-group">
-            <legend>Material</legend>
-            <div className="filter-group-fields material-filter-fields">
-              <label className="filter-search">
-                Buscar
-                <input
-                  value={params.get("search") ?? ""}
-                  maxLength={160}
-                  onChange={(e) => update("search", e.target.value)}
-                  placeholder="Título, descrição ou vendedor"
-                />
-              </label>
-              <label>
-                Categoria
-                <select
-                  value={params.get("category") ?? ""}
-                  onChange={(e) => update("category", e.target.value)}
-                >
-                  <option value="">Todas</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.slug}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Condição
-                <select
-                  value={params.get("condition") ?? ""}
-                  onChange={(e) => update("condition", e.target.value)}
-                >
-                  <option value="">Todas</option>
-                  <option value="0">Ótimo estado</option>
-                  <option value="1">Bom estado</option>
-                  <option value="2">Estado regular</option>
-                </select>
-              </label>
-            </div>
+          <fieldset className="filter-group search-filter-group">
+            <legend>Buscar materiais</legend>
+            <input
+              aria-label="Buscar materiais"
+              value={params.get("search") ?? ""}
+              maxLength={160}
+              onChange={(e) => update("search", e.target.value)}
+              placeholder="Material, descrição ou nome do vendedor"
+            />
+          </fieldset>
+          <fieldset className="filter-group choices-filter-group">
+            <legend>Categoria</legend>
+            <details className="multi-select">
+              <summary>{selectedCategories.length ? `${selectedCategories.length} selecionada${selectedCategories.length > 1 ? "s" : ""}` : "Todas as categorias"}</summary>
+              <div className="multi-select-options">
+                {categories.map((category) => <label key={category.id}><input type="checkbox" checked={selectedCategories.includes(category.slug)} onChange={() => toggleFilterValue("category", category.slug)} />{category.name}</label>)}
+              </div>
+            </details>
+          </fieldset>
+          <fieldset className="filter-group choices-filter-group">
+            <legend>Condição</legend>
+            <details className="multi-select">
+              <summary>{selectedConditions.length ? `${selectedConditions.length} selecionada${selectedConditions.length > 1 ? "s" : ""}` : "Todas as condições"}</summary>
+              <div className="multi-select-options">
+                {[{ value: "0", label: "Ótimo estado" }, { value: "1", label: "Bom estado" }, { value: "2", label: "Estado regular" }].map((item) => <label key={item.value}><input type="checkbox" checked={selectedConditions.includes(item.value)} onChange={() => toggleFilterValue("condition", item.value)} />{item.label}</label>)}
+              </div>
+            </details>
           </fieldset>
           <fieldset className="filter-group location-filter-group">
             <legend>Localização</legend>
-            <div className="filter-group-fields location-filter-fields">
-              <label>
-                Cidade
-                <input
-                  maxLength={100}
-                  value={params.get("city") ?? ""}
-                  onChange={(e) => update("city", e.target.value)}
-                />
-              </label>
-              <label>
-                UF
-                <input
-                  maxLength={2}
-                  value={params.get("state") ?? ""}
-                  onChange={(e) => update("state", e.target.value.toUpperCase())}
-                />
-              </label>
-              <label>
-                Bairro
-                <input
-                  maxLength={100}
-                  value={params.get("neighborhood") ?? ""}
-                  onChange={(e) => update("neighborhood", e.target.value)}
-                />
-              </label>
-              <label>
-                CEP
-                <input
-                  inputMode="numeric"
-                  maxLength={9}
-                  value={formatPostalCode(params.get("postalCode") ?? "")}
-                  onChange={(e) => update("postalCode", formatPostalCode(e.target.value))}
-                />
-              </label>
-            </div>
+            <input aria-label="Localização" maxLength={160} value={params.get("location") ?? ""} onChange={(e) => update("location", e.target.value)} placeholder="Cidade, UF, bairro, rua ou CEP" />
           </fieldset>
           <fieldset className="filter-group price-filter-group">
             <legend>Faixa de preço</legend>
-            <div className="filter-group-fields price-filter-fields">
-              <label>
-                Mínimo
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="R$ 0"
-                  value={params.get("minPrice") ?? ""}
-                  onChange={(e) => update("minPrice", e.target.value)}
-                />
-              </label>
-              <label>
-                Máximo
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="Sem limite"
-                  value={params.get("maxPrice") ?? ""}
-                  onChange={(e) => update("maxPrice", e.target.value)}
-                />
-              </label>
+            <div className="price-inputs">
+              <label>De<input type="text" inputMode="numeric" placeholder="R$ 0,00" value={formatPriceInput(params.get("minPrice"))} onChange={(e) => update("minPrice", parsePriceInput(e.target.value))} /></label>
+              <label>Até<input type="text" inputMode="numeric" placeholder="Sem limite" value={formatPriceInput(params.get("maxPrice"))} onChange={(e) => update("maxPrice", parsePriceInput(e.target.value))} /></label>
+            </div>
+            <div className="price-dual-range" aria-label="Ajustar faixa de preço">
+              <span className="price-range-selected" style={{ left: `${(minPrice / priceLimit) * 100}%`, right: `${100 - (maxPrice / priceLimit) * 100}%` }} />
+              <input className="price-range-min" aria-label="Ajustar valor mínimo" type="range" min="0" max={priceLimit} step="50" value={minPrice} onChange={(e) => updatePriceRange("minPrice", Number(e.target.value))} />
+              <input className="price-range-max" aria-label="Ajustar valor máximo" type="range" min="0" max={priceLimit} step="50" value={maxPrice} onChange={(e) => updatePriceRange("maxPrice", Number(e.target.value))} />
             </div>
           </fieldset>
           {(params.get("search") ||
             params.get("category") ||
-            params.get("city") ||
-            params.get("state") ||
-            params.get("neighborhood") ||
-            params.get("postalCode") ||
+            params.get("location") ||
             params.get("minPrice") ||
             params.get("maxPrice") ||
             params.get("condition")) && (
