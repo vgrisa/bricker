@@ -2,6 +2,7 @@ name: Deploy Bricker to Azure
 
 on:
   push:
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -10,11 +11,58 @@ permissions:
   id-token: write
 
 concurrency:
-  group: bricker-production
+  group: bricker-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      BRICKER_TEST_CONNECTION_STRING: Server=localhost,1433;Database=master;User Id=sa;Password=BrickerTests!2026;Encrypt=False;TrustServerCertificate=True
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: BrickerTests!2026
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'BrickerTests!2026' -Q 'SELECT 1' || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: bricker-web/package-lock.json
+
+      - name: Build frontend
+        working-directory: bricker-web
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test backend
+        run: dotnet test Bricker.Api.Tests/Bricker.Api.Tests.csproj --configuration Release
+
   build-and-deploy:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
 
@@ -33,7 +81,6 @@ jobs:
         working-directory: bricker-web
         run: |
           npm ci
-          npm run lint
           npm run build
 
       - name: Setup .NET

@@ -16,6 +16,43 @@ Marketplace local para compra e revenda de materiais de construcao excedentes.
 
 O endpoint inicial da API e `GET /api/v1/health`.
 
+## Testes
+
+Os testes unitários e de integração do backend usam um banco SQL Server temporário com o prefixo `BrickerTests_`; ele é removido ao final da execução. Com o SQL Express local disponível, execute:
+
+```powershell
+dotnet test Bricker.Api.Tests/Bricker.Api.Tests.csproj --configuration Release
+```
+
+Os testes de interface usam Vitest e uma API/SignalR simulados:
+
+```powershell
+npm test --prefix bricker-web
+```
+
+Antes de publicar uma alteração, a validação completa é:
+
+```powershell
+dotnet test Bricker.Api.Tests/Bricker.Api.Tests.csproj --configuration Release
+npm run lint --prefix bricker-web
+npm test --prefix bricker-web
+npm run build --prefix bricker-web
+```
+
+O GitHub Actions executa essa mesma validação em cada push e pull request. Somente um push na `main` aprovado pelos testes segue para publicação no Azure.
+
+### Roteiro manual de integrações externas
+
+- **Google:** confirme que o botão abre a seleção de conta, que uma conta nova é levada a `/completar-perfil` e que uma conta existente mantém seus dados.
+- **SignalR:** em duas contas diferentes, envie uma mensagem, confirme que ela chega sem recarregar a página e que o contador de não lidas é atualizado ao abrir a negociação.
+
+Para usar outra instância, informe a conexão base (o nome do banco será substituído automaticamente por um banco temporário):
+
+```powershell
+$env:BRICKER_TEST_CONNECTION_STRING = "Server=localhost\SQLEXPRESS;Database=master;Integrated Security=True;Encrypt=True;TrustServerCertificate=True"
+dotnet test Bricker.Api.Tests/Bricker.Api.Tests.csproj --configuration Release
+```
+
 ## Contas de demonstração
 
 Em desenvolvimento, um banco novo recebe anúncios completos, favoritos, interesses com negociações, uma venda e uma avaliação. Todas as contas usam a senha `Bricker123`:

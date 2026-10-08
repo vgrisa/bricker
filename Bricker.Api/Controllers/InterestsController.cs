@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using Bricker.Api.Services;
 
 namespace Bricker.Api.Controllers;
 
@@ -19,33 +20,46 @@ public sealed class InterestsController(BrickerDbContext db, UserManager<AppUser
     {
         var user = await userManager.GetUserAsync(User);
         if (user is null) return Unauthorized();
-        var listing = await db.Listings.SingleOrDefaultAsync(item => item.Id == id && item.Status == ListingStatus.Active, cancellationToken);
-        if (listing is null) return NotFound();
-        if (listing.SellerId == user.Id) return BadRequest(new { message = "Você não pode demonstrar interesse no próprio anúncio." });
-        if (string.IsNullOrWhiteSpace(listing.SellerId)) return BadRequest(new { message = "Este anúncio não possui um vendedor disponível para conversa." });
-
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        var interest = await db.ListingInterests.Include(item => item.Conversation)
-            .SingleOrDefaultAsync(item => item.ListingId == id && item.InterestedUserId == user.Id, cancellationToken);
-        if (interest?.Conversation is not null)
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
+            // A retry can follow a failed commit after SaveChanges accepted the tracked entities.
+            // Start each execution attempt from the database state instead of reusing those entities.
+            db.ChangeTracker.Clear();
+            var listing = await db.Listings.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+            switch (InterestCreationPolicy.Evaluate(listing, user.Id))
+            {
+                case InterestCreationDecision.ListingUnavailable:
+                    return (ActionResult<InterestCreatedResponse>)NotFound();
+                case InterestCreationDecision.OwnListing:
+                    return (ActionResult<InterestCreatedResponse>)BadRequest(new { message = "Você não pode demonstrar interesse no próprio anúncio." });
+                case InterestCreationDecision.SellerUnavailable:
+                    return (ActionResult<InterestCreatedResponse>)BadRequest(new { message = "Este anúncio não possui um vendedor disponível para conversa." });
+            }
+
+            await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            var interest = await db.ListingInterests.Include(item => item.Conversation)
+                .SingleOrDefaultAsync(item => item.ListingId == id && item.InterestedUserId == user.Id, cancellationToken);
+            if (interest?.Conversation is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return (ActionResult<InterestCreatedResponse>)Ok(new InterestCreatedResponse(interest.Id, interest.Conversation.Id));
+            }
+
+            interest ??= new ListingInterest { ListingId = id, InterestedUserId = user.Id };
+            if (db.Entry(interest).State == EntityState.Detached) db.ListingInterests.Add(interest);
+            var conversation = new Conversation
+            {
+                ListingInterestId = interest.Id,
+                ListingId = listing!.Id,
+                BuyerId = user.Id,
+                SellerId = listing.SellerId!
+            };
+            db.Conversations.Add(conversation);
+            await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return Ok(new InterestCreatedResponse(interest.Id, interest.Conversation.Id));
-        }
-
-        interest ??= new ListingInterest { ListingId = id, InterestedUserId = user.Id };
-        if (db.Entry(interest).State == EntityState.Detached) db.ListingInterests.Add(interest);
-        var conversation = new Conversation
-        {
-            ListingInterestId = interest.Id,
-            ListingId = listing.Id,
-            BuyerId = user.Id,
-            SellerId = listing.SellerId
-        };
-        db.Conversations.Add(conversation);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return Ok(new InterestCreatedResponse(interest.Id, conversation.Id));
+            return (ActionResult<InterestCreatedResponse>)Ok(new InterestCreatedResponse(interest.Id, conversation.Id));
+        });
     }
 
     [HttpGet("mine/interests")]
