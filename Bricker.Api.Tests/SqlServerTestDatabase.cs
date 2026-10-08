@@ -9,6 +9,8 @@ public sealed class SqlServerTestDatabase : IAsyncLifetime
     private const string TestDatabasePrefix = "BrickerTests_";
     private readonly string connectionString;
 
+    public string ConnectionString => connectionString;
+
     public SqlServerTestDatabase()
     {
         var configuredConnection = Environment.GetEnvironmentVariable("BRICKER_TEST_CONNECTION_STRING")
@@ -31,7 +33,7 @@ public sealed class SqlServerTestDatabase : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await using var context = CreateContext();
-        await context.Database.EnsureCreatedAsync();
+        await context.Database.MigrateAsync();
     }
 
     public async Task DisposeAsync()

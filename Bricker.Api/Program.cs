@@ -19,9 +19,12 @@ const string frontEndPolicy = "BrickerWeb";
 
 builder.Services.AddControllers(options =>
 {
-    var standardFormFactory = options.ValueProviderFactories.OfType<FormValueProviderFactory>().SingleOrDefault();
-    if (standardFormFactory is not null) options.ValueProviderFactories.Remove(standardFormFactory);
-    options.ValueProviderFactories.Add(new InvariantFormValueProviderFactory());
+    var index = options.ValueProviderFactories
+        .Select((factory, position) => new { factory, position })
+        .SingleOrDefault(item => item.factory is FormValueProviderFactory)?.position ?? 0;
+    if (options.ValueProviderFactories.ElementAtOrDefault(index) is FormValueProviderFactory)
+        options.ValueProviderFactories.RemoveAt(index);
+    options.ValueProviderFactories.Insert(index, new InvariantFormValueProviderFactory());
 });
 if (builder.Environment.IsDevelopment())
     builder.Configuration.AddJsonFile("appsettings.Development.local.json", optional: true, reloadOnChange: true);
@@ -179,3 +182,5 @@ using (var scope = app.Services.CreateScope())
 if (resetDemoData) return;
 
 app.Run();
+
+public partial class Program { }
