@@ -10,12 +10,19 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Bricker.Api.Storage;
+using Bricker.Api.Binding;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 var resetDemoData = args.Contains("--reset-demo-data", StringComparer.OrdinalIgnoreCase);
 var builder = WebApplication.CreateBuilder(args);
 const string frontEndPolicy = "BrickerWeb";
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    var standardFormFactory = options.ValueProviderFactories.OfType<FormValueProviderFactory>().SingleOrDefault();
+    if (standardFormFactory is not null) options.ValueProviderFactories.Remove(standardFormFactory);
+    options.ValueProviderFactories.Add(new InvariantFormValueProviderFactory());
+});
 if (builder.Environment.IsDevelopment())
     builder.Configuration.AddJsonFile("appsettings.Development.local.json", optional: true, reloadOnChange: true);
 // Environment variables and command-line values must override local development settings.
